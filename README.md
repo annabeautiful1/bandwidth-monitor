@@ -35,52 +35,57 @@
 ## 📦 快速开始
 
 ### 1. 服务端安装 (监控服务器)
+- GitHub 源
 ```bash
-# GitHub
 curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
-# 镜像（jsDelivr）
+```
+- 中国大陆镜像（jsDelivr）
+```bash
 curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/install-server.sh | sudo bash
 ```
 
 ### 2. 客户端安装 (被监控服务器)
-- 交互式安装
+- GitHub 源（交互式）
 ```bash
-# GitHub
 curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
-# 镜像（jsDelivr）
+```
+- 中国大陆镜像（交互式）
+```bash
 curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/install-client.sh | sudo bash
 ```
-- 一键非交互（与 akile 探针风格一致）
+- GitHub 源（一键非交互）
 ```bash
 wget -O setup-client.sh https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh \
   && chmod +x setup-client.sh \
   && sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
-# 镜像
+```
+- 中国大陆镜像（一键非交互）
+```bash
 wget -O setup-client.sh https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/setup-client.sh \
   && chmod +x setup-client.sh \
   && sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
 ```
-- 环境变量直装（可自定义阈值、时间窗）
-```bash
-SERVER_URL='http://api.example.com:8080' PASSWORD='abc123' HOSTNAME='CN-GZ-QZY-1G' IFACE='eth0' REPORT_INTERVAL='60' \
-STATIC_BW='0' DAY_START='10:00' DAY_END='02:00' DAY_BW='200' NIGHT_START='02:00' NIGHT_END='10:00' NIGHT_BW='50' \
-bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh)
-```
 
 ### 3. 一键更新（升级到最新Release）
-- 服务端更新
+- GitHub 源
 ```bash
-# GitHub
+# 服务端
 bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-server.sh)
-# 镜像
-bash <(curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/update-server.sh)
-```
-- 客户端更新
-```bash
-# GitHub
+# 客户端
 bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
-# 镜像
+```
+- 中国大陆镜像
+```bash
+# 服务端
+bash <(curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/update-server.sh)
+# 客户端
 bash <(curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/update-client.sh)
+```
+
+> 提升发布包下载速度：脚本支持通过 `RELEASE_MIRROR` 指定 Release 下载镜像前缀（如 `https://ghproxy.com/`）。示例：
+```bash
+RELEASE_MIRROR=https://ghproxy.com/ \
+bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
 ```
 
 ## ⚙️ 阈值配置（客户端侧）

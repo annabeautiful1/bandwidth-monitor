@@ -16,7 +16,12 @@ case "$ARCH" in
   aarch64) FILE="bandwidth-monitor-server-linux-arm64" ;;
   *) echo "不支持的架构: $ARCH"; exit 1 ;;
 esac
-URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST}/${FILE}"
+# 可通过 RELEASE_MIRROR 指定镜像前缀（例如 https://ghproxy.com/）
+BASE_GH="https://github.com"
+if [ -n "${RELEASE_MIRROR:-}" ]; then
+  BASE_GH="$RELEASE_MIRROR"
+fi
+URL="${BASE_GH}/${GITHUB_REPO}/releases/download/${LATEST}/${FILE}"
 
 echo "停止服务: $SERVICE_NAME (若不存在将忽略)"
 systemctl stop "$SERVICE_NAME" 2>/dev/null || true

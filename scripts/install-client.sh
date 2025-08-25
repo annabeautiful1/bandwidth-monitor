@@ -56,8 +56,12 @@ fi
 
 echo -e "${GREEN}最新版本: $LATEST_VERSION${NC}"
 
-# 下载URL
-DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$LATEST_VERSION/bandwidth-monitor-client-linux-$ARCH"
+# 下载URL（可通过 RELEASE_MIRROR 指定镜像前缀，例如 https://ghproxy.com/）
+BASE_GH="https://github.com"
+if [ -n "${RELEASE_MIRROR:-}" ]; then
+    BASE_GH="$RELEASE_MIRROR"
+fi
+DOWNLOAD_URL="$BASE_GH/$GITHUB_REPO/releases/download/$LATEST_VERSION/bandwidth-monitor-client-linux-$ARCH"
 
 # 创建安装目录
 echo -e "${YELLOW}创建安装目录...${NC}"
