@@ -39,9 +39,9 @@
 ```bash
 curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
 ```
-- 中国大陆镜像（jsDelivr）
+- 中国大陆镜像（ghproxy）
 ```bash
-curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/install-server.sh | sudo bash
+curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
 ```
 
 ### 2. 客户端安装 (被监控服务器)
@@ -51,7 +51,7 @@ curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/mai
 ```
 - 中国大陆镜像（交互式）
 ```bash
-curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/install-client.sh | sudo bash
+curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
 ```
 - GitHub 源（一键非交互）
 ```bash
@@ -61,7 +61,7 @@ wget -O setup-client.sh https://raw.githubusercontent.com/annabeautiful1/bandwid
 ```
 - 中国大陆镜像（一键非交互）
 ```bash
-wget -O setup-client.sh https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/setup-client.sh \
+wget -O setup-client.sh https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh \
   && chmod +x setup-client.sh \
   && sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
 ```
@@ -77,9 +77,9 @@ bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-moni
 - 中国大陆镜像
 ```bash
 # 服务端
-bash <(curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/update-server.sh)
+bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-server.sh)
 # 客户端
-bash <(curl -sSL https://cdn.jsdelivr.net/gh/annabeautiful1/bandwidth-monitor/scripts/update-client.sh)
+bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
 ```
 
 > 提升发布包下载速度：脚本支持通过 `RELEASE_MIRROR` 指定 Release 下载镜像前缀（如 `https://ghproxy.com/`）。示例：
