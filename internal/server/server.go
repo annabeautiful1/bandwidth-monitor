@@ -29,20 +29,20 @@ func NewServer(config *models.ServerConfig, tgBot *telegram.Bot) *Server {
 
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
-	
+
 	// API路由
 	mux.HandleFunc("/api/report", s.handleReport)
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/test-telegram", s.handleTestTelegram)
-	
+
 	// 启动监控goroutine
 	go s.monitorNodes()
-	
+
 	s.server = &http.Server{
 		Addr:    s.config.Listen,
 		Handler: mux,
 	}
-	
+
 	return s.server.ListenAndServe()
 }
 
@@ -72,14 +72,14 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 
 	// 更新节点状态
 	s.updateNodeStatus(req.Hostname, req.Metrics)
-	
+
 	s.sendResponse(w, true, "上报成功", nil)
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	s.sendResponse(w, true, "获取状态成功", s.nodes)
 }
 
@@ -108,7 +108,7 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics)
 
 	now := time.Now()
 	wasOffline := false
-	
+
 	// 检查节点是否存在
 	node, exists := s.nodes[hostname]
 	if !exists {
@@ -116,6 +116,7 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics)
 			Hostname:         hostname,
 			IsOnline:         true,
 			BandwidthAlerted: false,
+			ReportSamples:    0,
 		}
 		s.nodes[hostname] = node
 		log.Printf("新节点上线: %s", hostname)
@@ -127,6 +128,7 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics)
 	node.LastSeen = now
 	node.Metrics = metrics
 	node.IsOnline = true
+	node.ReportSamples++
 
 	// 如果节点重新上线，发送通知
 	if wasOffline && s.tgBot != nil {
@@ -135,13 +137,15 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics)
 		}
 	}
 
-	// 检查带宽告警
-	s.checkBandwidthAlert(node)
+	// 检查带宽告警（跳过首个样本防止冷启动误报）
+	if node.ReportSamples >= 2 {
+		s.checkBandwidthAlert(node)
+	}
 }
 
 func (s *Server) checkBandwidthAlert(node *models.NodeStatus) {
 	// 计算当前带宽 (Mbps)
-	inMbps := float64(node.Metrics.NetworkInBps) / 125000.0  // 1 Mbps = 125000 bytes/s
+	inMbps := float64(node.Metrics.NetworkInBps) / 125000.0 // 1 Mbps = 125000 bytes/s
 	outMbps := float64(node.Metrics.NetworkOutBps) / 125000.0
 	currentMbps := inMbps
 	if outMbps > inMbps {
@@ -169,6 +173,11 @@ func (s *Server) checkBandwidthAlert(node *models.NodeStatus) {
 		// 带宽恢复正常
 		if node.BandwidthAlerted {
 			node.BandwidthAlerted = false
+			if s.tgBot != nil {
+				if err := s.tgBot.SendBandwidthRecovery(node.Hostname, currentMbps); err != nil {
+					log.Printf("发送恢复通知失败: %v", err)
+				}
+			}
 			log.Printf("节点 %s 带宽恢复正常: %.2f Mbps", node.Hostname, currentMbps)
 		}
 	}
@@ -195,13 +204,13 @@ func (s *Server) checkOfflineNodes() {
 			// 节点离线
 			node.IsOnline = false
 			node.BandwidthAlerted = false // 重置带宽告警状态
-			
+
 			if s.tgBot != nil {
 				if err := s.tgBot.SendOfflineAlert(hostname, now.Sub(node.LastSeen)); err != nil {
 					log.Printf("发送离线告警失败: %v", err)
 				}
 			}
-			
+
 			log.Printf("节点 %s 离线，最后上报时间: %s", hostname, node.LastSeen.Format("2006-01-02 15:04:05"))
 		}
 	}
@@ -209,16 +218,16 @@ func (s *Server) checkOfflineNodes() {
 
 func (s *Server) sendResponse(w http.ResponseWriter, success bool, message string, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	response := models.APIResponse{
 		Success: success,
 		Message: message,
 		Data:    data,
 	}
-	
+
 	if !success {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }

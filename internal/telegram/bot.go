@@ -27,7 +27,7 @@ func NewBot(token string, chatID int64) (*Bot, error) {
 func (b *Bot) SendMessage(text string) error {
 	msg := tgbotapi.NewMessage(b.chatID, text)
 	msg.ParseMode = tgbotapi.ModeMarkdown
-	
+
 	_, err := b.api.Send(msg)
 	return err
 }
@@ -42,7 +42,18 @@ func (b *Bot) SendBandwidthAlert(hostname string, currentMbps, thresholdMbps flo
 		currentMbps,
 		thresholdMbps,
 		time.Now().Format("2006-01-02 15:04:05"))
-	
+
+	return b.SendMessage(text)
+}
+
+func (b *Bot) SendBandwidthRecovery(hostname string, currentMbps float64) error {
+	text := fmt.Sprintf("🟢 *带宽已恢复*\n\n"+
+		"节点: `%s`\n"+
+		"当前带宽: `%.2f Mbps`\n"+
+		"时间: `%s`",
+		hostname,
+		currentMbps,
+		time.Now().Format("2006-01-02 15:04:05"))
 	return b.SendMessage(text)
 }
 
@@ -54,7 +65,7 @@ func (b *Bot) SendOfflineAlert(hostname string, offlineDuration time.Duration) e
 		hostname,
 		offlineDuration.Minutes(),
 		time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	return b.SendMessage(text)
 }
 
@@ -64,7 +75,7 @@ func (b *Bot) SendOnlineAlert(hostname string) error {
 		"时间: `%s`",
 		hostname,
 		time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	return b.SendMessage(text)
 }
 

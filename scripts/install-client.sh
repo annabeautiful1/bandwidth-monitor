@@ -133,6 +133,32 @@ else
     done
 fi
 
+# 网卡选择（env: IFACE）
+if [ -n "${IFACE:-}" ]; then
+    iface="$IFACE"
+else
+    echo -e "${YELLOW}正在获取可用网卡...${NC}"
+    mapfile -t IFACES < <(ls -1 /sys/class/net | grep -vE '^(lo|veth|docker|br-|virbr|vmnet|zt|tailscale|wg)')
+    if [ ${#IFACES[@]} -eq 0 ]; then
+        IFACES=(lo)
+    fi
+    echo "可选网卡:"
+    for i in "${!IFACES[@]}"; do
+        idx=$((i+1))
+        echo "  $idx) ${IFACES[$i]}"
+    done
+    while true; do
+        read -r -p "请选择用于监控的网卡编号 (默认1): " nic_idx </dev/tty || true
+        nic_idx=${nic_idx:-1}
+        if [[ "$nic_idx" =~ ^[0-9]+$ ]] && [ "$nic_idx" -ge 1 ] && [ "$nic_idx" -le ${#IFACES[@]} ]; then
+            iface="${IFACES[$((nic_idx-1))]}"
+            break
+        else
+            echo -e "${RED}无效选择，请重试${NC}"
+        fi
+    done
+fi
+
 # 生成配置文件
 echo -e "${YELLOW}正在生成配置文件...${NC}"
 cat > "$CONFIG_FILE" << EOF
@@ -140,7 +166,8 @@ cat > "$CONFIG_FILE" << EOF
   "password": "$password",
   "server_url": "$server_url",
   "hostname": "$hostname",
-  "report_interval_seconds": $report_interval
+  "report_interval_seconds": $report_interval,
+  "interface_name": "${iface}"
 }
 EOF
 
@@ -173,21 +200,7 @@ systemctl start "$SERVICE_NAME"
 sleep 3
 if systemctl is-active --quiet "$SERVICE_NAME"; then
     echo -e "${GREEN}✓ 服务启动成功${NC}"
-    
-    # 检查日志中的连接状态
-    echo -e "${YELLOW}正在检查连接状态...${NC}"
-    sleep 2
-    
-    if journalctl -u "$SERVICE_NAME" --no-pager -n 10 | grep -q "上报成功"; then
-        echo -e "${GREEN}✓ 客户端已成功连接到服务器${NC}"
-    elif journalctl -u "$SERVICE_NAME" --no-pager -n 10 | grep -q "密码错误"; then
-        echo -e "${RED}✗ 密码错误，请检查配置${NC}"
-        echo -e "${YELLOW}请修改配置文件: $CONFIG_FILE${NC}"
-    elif journalctl -u "$SERVICE_NAME" --no-pager -n 10 | grep -q "连接失败\|请求失败"; then
-        echo -e "${RED}✗ 无法连接到服务器，请检查服务器地址和网络${NC}"
-    else
-        echo -e "${YELLOW}连接状态未知，请查看日志获取详细信息${NC}"
-    fi
+    echo -e "监控网卡: ${iface:-自动选择}"
 else
     echo -e "${RED}✗ 服务启动失败，请检查日志: journalctl -u $SERVICE_NAME${NC}"
     exit 1
@@ -205,19 +218,9 @@ echo "  - 配置文件: $CONFIG_FILE"
 echo "  - 服务器地址: $server_url"
 echo "  - 节点名称: $hostname"
 echo "  - 上报间隔: ${report_interval}秒"
+echo "  - 监控网卡: ${iface:-自动选择}"
 echo "  - 服务名称: $SERVICE_NAME"
 echo
-echo -e "${YELLOW}常用命令:${NC}"
-echo "  - 查看状态: systemctl status $SERVICE_NAME"
-echo "  - 查看日志: journalctl -u $SERVICE_NAME -f"
-echo "  - 重启服务: systemctl restart $SERVICE_NAME"
-echo "  - 停止服务: systemctl stop $SERVICE_NAME"
-echo
-echo -e "${YELLOW}配置修改:${NC}"
-echo "  - 编辑配置: nano $CONFIG_FILE"
-echo "  - 重启生效: systemctl restart $SERVICE_NAME"
-echo
-echo -e "${GREEN}客户端已开始向服务器上报系统监控数据！${NC}"
 
 # 显示最近的日志
 echo

@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"bandwidth-monitor/internal/models"
+
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
@@ -22,6 +24,8 @@ type Client struct {
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
 	lastNetStats map[string]net.IOCountersStat
+	lastSampleAt time.Time
+	chosenIfName string
 }
 
 func NewClient(config *models.ClientConfig) *Client {
@@ -36,6 +40,10 @@ func NewClient(config *models.ClientConfig) *Client {
 }
 
 func (c *Client) Start() error {
+	// 选择监控网卡
+	c.chosenIfName = c.selectInterfaceName()
+	log.Printf("使用网卡: %s", c.chosenIfName)
+
 	ticker := time.NewTicker(time.Duration(c.config.ReportIntervalSeconds) * time.Second)
 	defer ticker.Stop()
 
@@ -116,32 +124,56 @@ func (c *Client) collectMetrics() (*models.SystemMetrics, error) {
 }
 
 func (c *Client) getNetworkSpeed() (uint64, uint64, error) {
-	stats, err := net.IOCounters(false)
+	// 获取每个网卡的统计
+	stats, err := net.IOCounters(true)
 	if err != nil || len(stats) == 0 {
 		return 0, 0, err
 	}
 
-	currentStats := stats[0]
-	
-	// 如果是第一次采集，记录当前值并返回0
-	lastStats, exists := c.lastNetStats["total"]
+	// 根据配置或自动选择到具体网卡
+	ifaceName := c.chosenIfName
+	var currentStats net.IOCountersStat
+	found := false
+	for _, s := range stats {
+		if s.Name == ifaceName {
+			currentStats = s
+			found = true
+			break
+		}
+	}
+	if !found {
+		for _, s := range stats {
+			if s.Name != "lo" && !isVirtualName(s.Name) {
+				currentStats = s
+				ifaceName = s.Name
+				break
+			}
+		}
+	}
+
+	// 如果是第一次采集，记录并返回0（避免冷启动高估）
+	lastStats, exists := c.lastNetStats[ifaceName]
+	now := time.Now()
 	if !exists {
-		c.lastNetStats["total"] = currentStats
+		c.lastNetStats[ifaceName] = currentStats
+		c.lastSampleAt = now
 		return 0, 0, nil
 	}
 
-	// 计算时间间隔
-	interval := time.Duration(c.config.ReportIntervalSeconds) * time.Second
-	
-	// 计算速率 (bytes/s)
+	// 用真实间隔计算速度
+	elapsed := now.Sub(c.lastSampleAt).Seconds()
+	if elapsed <= 0 {
+		elapsed = float64(c.config.ReportIntervalSeconds)
+	}
+
 	bytesInDiff := currentStats.BytesRecv - lastStats.BytesRecv
 	bytesOutDiff := currentStats.BytesSent - lastStats.BytesSent
-	
-	inBps := uint64(float64(bytesInDiff) / interval.Seconds())
-	outBps := uint64(float64(bytesOutDiff) / interval.Seconds())
 
-	// 更新上次的统计
-	c.lastNetStats["total"] = currentStats
+	inBps := uint64(float64(bytesInDiff) / elapsed)
+	outBps := uint64(float64(bytesOutDiff) / elapsed)
+
+	c.lastNetStats[ifaceName] = currentStats
+	c.lastSampleAt = now
 
 	return inBps, outBps, nil
 }
@@ -190,4 +222,31 @@ func formatBytes(bytes uint64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// 选择网卡：优先使用配置，否则选择第一个非回环/非虚拟网卡
+func (c *Client) selectInterfaceName() string {
+	if c.config.InterfaceName != "" {
+		return c.config.InterfaceName
+	}
+	ifaces, _ := net.Interfaces()
+	for _, iface := range ifaces {
+		name := iface.Name
+		if name == "lo" || isVirtualName(name) {
+			continue
+		}
+		return name
+	}
+	return "lo"
+}
+
+func isVirtualName(name string) bool {
+	lower := strings.ToLower(name)
+	prefixes := []string{"veth", "docker", "br-", "virbr", "vmnet", "zt", "tailscale", "wg"}
+	for _, p := range prefixes {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	return false
 }

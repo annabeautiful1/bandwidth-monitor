@@ -29,6 +29,9 @@ func main() {
 	go func() {
 		log.Printf("客户端启动，连接到服务器: %s", config.ServerURL)
 		log.Printf("上报间隔: %d秒", config.ReportIntervalSeconds)
+		if config.InterfaceName != "" {
+			log.Printf("指定网卡: %s", config.InterfaceName)
+		}
 		
 		if err := c.Start(); err != nil {
 			log.Fatalf("客户端运行失败: %v", err)
@@ -59,6 +62,7 @@ func loadConfig(path string) (*models.ClientConfig, error) {
 			ServerURL:            "http://your-server.com:8080",
 			Hostname:             hostname,
 			ReportIntervalSeconds: 60,
+			InterfaceName:        "", // 留空将自动选择非回环网卡
 		}
 
 		if err := saveConfig(path, defaultConfig); err != nil {
