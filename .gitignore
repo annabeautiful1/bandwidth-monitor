@@ -1,0 +1,10 @@
+bin/ 
+dist/ 
+artifacts/ 
+release/ 
+.DS_Store 
+thumbs.db 
+*.log 
+*.tmp 
+node_modules/ 
+vendor/
