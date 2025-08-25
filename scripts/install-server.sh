@@ -75,66 +75,94 @@ chmod +x "$INSTALL_DIR/server"
 
 echo -e "${GREEN}服务端程序下载完成${NC}"
 
-# 配置收集
+#############################################
+# 配置收集（支持环境变量与 /dev/tty 交互）
+#############################################
 echo -e "${BLUE}开始配置收集...${NC}"
 
-# 访问密码
-while true; do
-    read -p "请设置访问密码: " -s password
-    echo
-    if [ -n "$password" ]; then
-        break
-    else
-        echo -e "${RED}密码不能为空${NC}"
-    fi
-done
-
-# 监听端口
-while true; do
-    read -p "请设置监听端口 (默认: 8080): " listen_port
-    listen_port=${listen_port:-8080}
-    if [[ "$listen_port" =~ ^[0-9]+$ ]] && [ "$listen_port" -ge 1 ] && [ "$listen_port" -le 65535 ]; then
-        break
-    else
-        echo -e "${RED}请输入有效的端口号 (1-65535)${NC}"
-    fi
-done
-
-# 域名/IP
-read -p "请输入服务器域名或IP (用于客户端连接): " domain
-domain=${domain:-"localhost"}
-
-# Telegram配置
-read -p "是否配置Telegram机器人通知? (y/n): " enable_telegram
-if [[ "$enable_telegram" =~ ^[Yy]$ ]]; then
-    read -p "请输入Telegram机器人Token: " tg_token
-    read -p "请输入Telegram Chat ID: " tg_chat_id
+# 访问密码（env: PASSWORD）
+if [ -n "${PASSWORD:-}" ]; then
+    password="$PASSWORD"
 else
-    tg_token=""
-    tg_chat_id=0
+    while true; do
+        # 从 /dev/tty 读取，保证在 curl | bash 下可交互
+        read -r -s -p "请设置访问密码: " password </dev/tty || true
+        echo
+        if [ -n "$password" ]; then
+            break
+        else
+            echo -e "${RED}密码不能为空${NC}"
+        fi
+    done
 fi
 
-# 带宽阈值
-while true; do
-    read -p "请设置带宽告警阈值 (Mbps，默认: 10): " bandwidth_threshold
-    bandwidth_threshold=${bandwidth_threshold:-10}
-    if [[ "$bandwidth_threshold" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-        break
-    else
-        echo -e "${RED}请输入有效的数字${NC}"
-    fi
-done
+# 监听端口（env: LISTEN_PORT，默认 8080）
+if [ -n "${LISTEN_PORT:-}" ]; then
+    listen_port="$LISTEN_PORT"
+else
+    while true; do
+        read -r -p "请设置监听端口 (默认: 8080): " listen_port </dev/tty || true
+        listen_port=${listen_port:-8080}
+        if [[ "$listen_port" =~ ^[0-9]+$ ]] && [ "$listen_port" -ge 1 ] && [ "$listen_port" -le 65535 ]; then
+            break
+        else
+            echo -e "${RED}请输入有效的端口号 (1-65535)${NC}"
+        fi
+    done
+fi
 
-# 离线阈值
-while true; do
-    read -p "请设置离线告警阈值 (秒，默认: 300): " offline_threshold
-    offline_threshold=${offline_threshold:-300}
-    if [[ "$offline_threshold" =~ ^[0-9]+$ ]]; then
-        break
+# 域名/IP（env: DOMAIN，默认 localhost）
+if [ -n "${DOMAIN:-}" ]; then
+    domain="$DOMAIN"
+else
+    read -r -p "请输入服务器域名或IP (用于客户端连接，默认: localhost): " domain </dev/tty || true
+    domain=${domain:-"localhost"}
+fi
+
+# Telegram 配置（env: TG_TOKEN, TG_CHAT_ID，可选）
+if [ -n "${TG_TOKEN:-}" ] && [ -n "${TG_CHAT_ID:-}" ]; then
+    tg_token="$TG_TOKEN"
+    tg_chat_id="$TG_CHAT_ID"
+else
+    read -r -p "是否配置Telegram机器人通知? (y/n): " enable_telegram </dev/tty || true
+    if [[ "$enable_telegram" =~ ^[Yy]$ ]]; then
+        read -r -p "请输入Telegram机器人Token: " tg_token </dev/tty || true
+        read -r -p "请输入Telegram Chat ID: " tg_chat_id </dev/tty || true
     else
-        echo -e "${RED}请输入有效的数字${NC}"
+        tg_token=""
+        tg_chat_id=0
     fi
-done
+fi
+
+# 带宽阈值（env: BANDWIDTH_THRESHOLD，默认 10）
+if [ -n "${BANDWIDTH_THRESHOLD:-}" ]; then
+    bandwidth_threshold="$BANDWIDTH_THRESHOLD"
+else
+    while true; do
+        read -r -p "请设置带宽告警阈值 (Mbps，默认: 10): " bandwidth_threshold </dev/tty || true
+        bandwidth_threshold=${bandwidth_threshold:-10}
+        if [[ "$bandwidth_threshold" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            break
+        else
+            echo -e "${RED}请输入有效的数字${NC}"
+        fi
+    done
+fi
+
+# 离线阈值（env: OFFLINE_SECONDS，默认 300）
+if [ -n "${OFFLINE_SECONDS:-}" ]; then
+    offline_threshold="$OFFLINE_SECONDS"
+else
+    while true; do
+        read -r -p "请设置离线告警阈值 (秒，默认: 300): " offline_threshold </dev/tty || true
+        offline_threshold=${offline_threshold:-300}
+        if [[ "$offline_threshold" =~ ^[0-9]+$ ]]; then
+            break
+        else
+            echo -e "${RED}请输入有效的数字${NC}"
+        fi
+    done
+fi
 
 # 生成配置文件
 echo -e "${YELLOW}正在生成配置文件...${NC}"

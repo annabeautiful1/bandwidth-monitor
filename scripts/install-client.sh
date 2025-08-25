@@ -75,45 +75,63 @@ chmod +x "$INSTALL_DIR/client"
 
 echo -e "${GREEN}客户端程序下载完成${NC}"
 
-# 配置收集
+#############################################
+# 配置收集（支持环境变量与 /dev/tty 交互）
+#############################################
 echo -e "${BLUE}开始配置收集...${NC}"
 
-# 服务器地址
-while true; do
-    read -p "请输入服务器地址 (例: http://your-server.com:8080): " server_url
-    if [[ "$server_url" =~ ^https?:// ]]; then
-        break
-    else
-        echo -e "${RED}请输入完整的服务器地址，包含 http:// 或 https://${NC}"
-    fi
-done
+# 服务器地址（env: SERVER_URL）
+if [ -n "${SERVER_URL:-}" ]; then
+    server_url="$SERVER_URL"
+else
+    while true; do
+        read -r -p "请输入服务器地址 (例: http://your-server.com:8080): " server_url </dev/tty || true
+        if [[ "$server_url" =~ ^https?:// ]]; then
+            break
+        else
+            echo -e "${RED}请输入完整的服务器地址，包含 http:// 或 https://${NC}"
+        fi
+    done
+fi
 
-# 访问密码
-while true; do
-    read -p "请输入服务器访问密码: " -s password
-    echo
-    if [ -n "$password" ]; then
-        break
-    else
-        echo -e "${RED}密码不能为空${NC}"
-    fi
-done
+# 访问密码（env: PASSWORD）
+if [ -n "${PASSWORD:-}" ]; then
+    password="$PASSWORD"
+else
+    while true; do
+        read -r -s -p "请输入服务器访问密码: " password </dev/tty || true
+        echo
+        if [ -n "$password" ]; then
+            break
+        else
+            echo -e "${RED}密码不能为空${NC}"
+        fi
+    done
+fi
 
-# 获取主机名
-default_hostname=$(hostname)
-read -p "请输入节点名称 (默认: $default_hostname): " hostname
-hostname=${hostname:-$default_hostname}
+# 节点名称（env: HOSTNAME）
+if [ -n "${HOSTNAME:-}" ]; then
+    hostname="$HOSTNAME"
+else
+    default_hostname=$(hostname)
+    read -r -p "请输入节点名称 (默认: $default_hostname): " hostname </dev/tty || true
+    hostname=${hostname:-$default_hostname}
+fi
 
-# 上报间隔
-while true; do
-    read -p "请设置上报间隔 (秒，默认: 60): " report_interval
-    report_interval=${report_interval:-60}
-    if [[ "$report_interval" =~ ^[0-9]+$ ]] && [ "$report_interval" -ge 10 ]; then
-        break
-    else
-        echo -e "${RED}请输入大于等于10的数字${NC}"
-    fi
-done
+# 上报间隔（env: REPORT_INTERVAL，默认 60，>=10）
+if [ -n "${REPORT_INTERVAL:-}" ]; then
+    report_interval="$REPORT_INTERVAL"
+else
+    while true; do
+        read -r -p "请设置上报间隔 (秒，默认: 60): " report_interval </dev/tty || true
+        report_interval=${report_interval:-60}
+        if [[ "$report_interval" =~ ^[0-9]+$ ]] && [ "$report_interval" -ge 10 ]; then
+            break
+        else
+            echo -e "${RED}请输入大于等于10的数字${NC}"
+        fi
+    done
+fi
 
 # 生成配置文件
 echo -e "${YELLOW}正在生成配置文件...${NC}"
