@@ -161,24 +161,15 @@ client.json 示例：
 curl -X POST http://<server>:<port>/api/test-telegram
 ```
 
-## ⚡ 快捷命令（可选）
+## ⚡ 快捷命令（自动安装）
 
-安装简化命令，让管理更便捷：
-```bash
-# 安装快捷命令
-sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-shortcuts.sh)
-```
-或使用镜像：
-```bash
-# 中国大陆镜像
-sudo bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-shortcuts.sh)
-```
-
-安装后可用命令：
+首次运行 bmctl.sh 控制脚本时，会自动安装简化命令：
 - `sudo bm` - 打开控制面板
 - `status bm` - 查看服务状态  
 - `log bm` - 查看日志
 - `sudo restart bm` - 重启服务
+
+无需单独安装，运行一键控制脚本后即可使用这些快捷命令。
 
 ## 📄 许可证
 本项目采用 MIT 许可证，详见 [LICENSE](LICENSE) 文件。

@@ -230,6 +230,161 @@ choose_mirror() {
   read -p "按 Enter 键继续..."
 }
 
+# 检查快捷命令是否已安装
+check_shortcuts_installed() {
+  [[ -f /usr/local/bin/bm ]] && [[ -f /usr/local/bin/status ]] && [[ -f /usr/local/bin/log ]] && [[ -f /usr/local/bin/restart ]]
+}
+
+# 首次运行时自动安装快捷命令
+install_shortcuts_if_needed() {
+  if ! check_shortcuts_installed; then
+    show_progress "检测到快捷命令未安装，正在自动安装"
+    install_shortcuts_silent
+  fi
+}
+
+# 静默安装快捷命令
+install_shortcuts_silent() {
+  install_shortcuts_core 2>/dev/null
+  if check_shortcuts_installed; then
+    log_success "快捷命令已自动安装 (bm, status bm, log bm, restart bm)"
+  fi
+}
+
+# 用户手动安装快捷命令
+install_shortcuts() {
+  show_progress "安装/更新快捷命令"
+  install_shortcuts_core
+  if check_shortcuts_installed; then
+    log_success "快捷命令安装完成！"
+    echo
+    log_info "可用命令："
+    echo "  sudo bm          - 打开控制面板"
+    echo "  status bm        - 查看服务状态"
+    echo "  log bm           - 查看日志"
+    echo "  sudo restart bm  - 重启服务"
+  else
+    log_error "快捷命令安装失败"
+  fi
+  read -p "按 Enter 键继续..."
+}
+
+# 核心安装逻辑
+install_shortcuts_core() {
+  # 创建 bm 命令（主控制脚本）
+  cat > /usr/local/bin/bm << 'EOF'
+#!/bin/bash
+# Bandwidth Monitor 快捷命令
+
+if [[ $EUID -ne 0 ]]; then
+  echo -e "\033[0;31m请使用 sudo 运行本命令\033[0m" >&2
+  exit 1
+fi
+
+REPO="annabeautiful1/bandwidth-monitor"
+RAW_BASE_GH="https://raw.githubusercontent.com/${REPO}/main"
+RAW_PROXY="https://ghfast.top/"
+
+bash <(curl -sSL "${RAW_PROXY}${RAW_BASE_GH}/scripts/bmctl.sh")
+EOF
+
+  # 创建 status 命令
+  cat > /usr/local/bin/status << 'EOF'
+#!/bin/bash
+# 查看服务状态快捷命令
+
+case "$1" in
+  bm|bandwidth-monitor)
+    echo "=== 服务端（主控）状态 ==="
+    systemctl status bandwidth-monitor --no-pager -l 2>/dev/null || echo "服务端未安装"
+    echo
+    echo "=== 客户端（被控）状态 ==="
+    systemctl status bandwidth-monitor-client --no-pager -l 2>/dev/null || echo "客户端未安装"
+    ;;
+  *)
+    echo "用法: status bm"
+    echo "显示 Bandwidth Monitor 服务状态"
+    exit 1
+    ;;
+esac
+EOF
+
+  # 创建 log 命令
+  cat > /usr/local/bin/log << 'EOF'
+#!/bin/bash
+# 查看日志快捷命令
+
+case "$1" in
+  bm|bandwidth-monitor)
+    echo "选择要查看的日志:"
+    echo "1) 服务端（主控）日志"
+    echo "2) 客户端（被控）日志"
+    read -rp "选择 [1-2]: " choice
+    case "$choice" in
+      1) journalctl -u bandwidth-monitor -n 50 --no-pager -f;;
+      2) journalctl -u bandwidth-monitor-client -n 50 --no-pager -f;;
+      *) echo "无效选择";;
+    esac
+    ;;
+  *)
+    echo "用法: log bm"
+    echo "查看 Bandwidth Monitor 日志"
+    exit 1
+    ;;
+esac
+EOF
+
+  # 创建 restart 命令
+  cat > /usr/local/bin/restart << 'EOF'
+#!/bin/bash
+# 重启服务快捷命令
+
+if [[ $EUID -ne 0 ]]; then
+  echo -e "\033[0;31m请使用 sudo 运行本命令\033[0m" >&2
+  exit 1
+fi
+
+case "$1" in
+  bm|bandwidth-monitor)
+    echo "选择要重启的服务:"
+    echo "1) 服务端（主控）"
+    echo "2) 客户端（被控）"
+    echo "3) 全部"
+    read -rp "选择 [1-3]: " choice
+    case "$choice" in
+      1) 
+        echo "重启服务端（主控）..."
+        systemctl restart bandwidth-monitor 2>/dev/null && echo -e "\033[0;32m服务端重启完成\033[0m" || echo -e "\033[0;31m服务端重启失败\033[0m"
+        systemctl status bandwidth-monitor --no-pager -l
+        ;;
+      2) 
+        echo "重启客户端（被控）..."
+        systemctl restart bandwidth-monitor-client 2>/dev/null && echo -e "\033[0;32m客户端重启完成\033[0m" || echo -e "\033[0;31m客户端重启失败\033[0m"
+        systemctl status bandwidth-monitor-client --no-pager -l
+        ;;
+      3)
+        echo "重启全部服务..."
+        systemctl restart bandwidth-monitor 2>/dev/null && echo -e "\033[0;32m服务端重启完成\033[0m" || echo -e "\033[0;31m服务端重启失败\033[0m"
+        systemctl restart bandwidth-monitor-client 2>/dev/null && echo -e "\033[0;32m客户端重启完成\033[0m" || echo -e "\033[0;31m客户端重启失败\033[0m"
+        ;;
+      *) echo "无效选择";;
+    esac
+    ;;
+  *)
+    echo "用法: sudo restart bm"
+    echo "重启 Bandwidth Monitor 服务"
+    exit 1
+    ;;
+esac
+EOF
+
+  # 设置可执行权限
+  chmod +x /usr/local/bin/bm
+  chmod +x /usr/local/bin/status
+  chmod +x /usr/local/bin/log
+  chmod +x /usr/local/bin/restart
+}
+
 config_menu() {
   while true; do
     clear
@@ -262,6 +417,10 @@ config_menu() {
 
 main_menu() {
   require_root
+  
+  # 首次运行时自动安装快捷命令
+  install_shortcuts_if_needed
+  
   while true; do
     clear
     echo -e "${PURPLE}╔══════════════════════════════════════════╗${NC}"
@@ -280,9 +439,9 @@ main_menu() {
     echo "7) 查看服务端（主控）日志"
     echo "8) 查看客户端（被控）日志"
     echo
-    echo -e "${YELLOW}m)${NC} 切换镜像源    ${RED}q)${NC} 退出"
+    echo -e "${YELLOW}i)${NC} 安装/更新快捷命令    ${YELLOW}m)${NC} 切换镜像源    ${RED}q)${NC} 退出"
     echo -e "${PURPLE}================================================${NC}"
-    read -rp "请选择 [1-8,m,q]: " a
+    read -rp "请选择 [1-8,i,m,q]: " a
     case "$a" in
       1) server_install_update;;
       2) server_restart;;
@@ -292,6 +451,7 @@ main_menu() {
       6) set_beijing_time;;
       7) server_logs;;
       8) client_logs;;
+      i|I) install_shortcuts;;
       m|M) choose_mirror;;
       q|Q) echo -e "${GREEN}感谢使用！${NC}"; exit 0;;
       *) log_warning "无效选择"; sleep 1;;
