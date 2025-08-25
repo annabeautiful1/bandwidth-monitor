@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -92,8 +95,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.ref }}
-        release_name: 带宽监控系统 ${{ github.ref }}
+        tag_name: ${{ github.ref_name }}
+        release_name: 带宽监控系统 ${{ github.ref_name }}
         body: |
           ## 🎉 带宽监控系统发布
           
