@@ -586,6 +586,52 @@ config_menu() {
   done
 }
 
+# 检查当前安装的版本信息
+check_current_versions() {
+  local server_status="❌ 未安装"
+  local client_status="❌ 未安装"
+  local server_config_status=""
+  local client_config_status=""
+  
+  # 检查服务端
+  if systemctl is-active --quiet bandwidth-monitor 2>/dev/null; then
+    server_status="✅ 运行中"
+    
+    # 检查服务端配置是否有新字段
+    if [ -f "/opt/bandwidth-monitor/config.json" ]; then
+      if grep -q "cpu_percent" /opt/bandwidth-monitor/config.json && grep -q "memory_percent" /opt/bandwidth-monitor/config.json; then
+        server_config_status=" | 配置: ✅ 已升级"
+      else
+        server_config_status=" | 配置: ⚠️ 需升级"
+      fi
+    fi
+  elif [ -f "/opt/bandwidth-monitor/server" ]; then
+    server_status="⏹️ 已安装未运行"
+  fi
+  
+  # 检查客户端
+  if systemctl is-active --quiet bandwidth-monitor-client 2>/dev/null; then
+    client_status="✅ 运行中"
+    
+    # 检查客户端配置是否有完整的动态阈值
+    if [ -f "/opt/bandwidth-monitor-client/client.json" ]; then
+      local dynamic_count=$(grep -c '"start":' /opt/bandwidth-monitor-client/client.json 2>/dev/null || echo "0")
+      if [ "$dynamic_count" -ge 3 ]; then
+        client_config_status=" | 配置: ✅ 已升级"
+      else
+        client_config_status=" | 配置: ⚠️ 需升级"
+      fi
+    fi
+  elif [ -f "/opt/bandwidth-monitor-client/client" ]; then
+    client_status="⏹️ 已安装未运行"
+  fi
+  
+  echo -e "${CYAN}当前版本状态:${NC}"
+  echo "  服务端: $server_status$server_config_status"
+  echo "  客户端: $client_status$client_config_status"
+  echo "  最新版本: v0.3.0 (时区热更新+CPU/内存告警+配置自动升级)"
+}
+
 main_menu() {
   require_root
   
@@ -615,6 +661,11 @@ main_menu() {
     echo
     echo -e "${YELLOW}i${NC} 安装/更新快捷命令    ${RED}0${NC} 退出"
     echo -e "${PURPLE}================================================${NC}"
+    
+    # 显示版本信息
+    check_current_versions
+    echo -e "${PURPLE}================================================${NC}"
+    
     read -rp "请选择 [0-8,i]: " a
     case "$a" in
       1) server_install_update;;
