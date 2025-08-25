@@ -6,7 +6,58 @@ set -e
 
 REPO="annabeautiful1/bandwidth-monitor"
 RAW_BASE_GH="https://raw.githubusercontent.com/${REPO}/main"
-RAW_PROXY=""  # 置为 https://ghfast.top/ 可走国内镜像
+RAW_PROXY=""  # 将由 auto_detect_mirror 函数设置
+
+# IP地理位置检测和镜像自动选择
+auto_detect_mirror() {
+  log_info "正在检测网络环境并选择最优镜像源..."
+  
+  # 检测是否为中国大陆IP
+  local is_china=false
+  
+  # 方法1: 通过 ip-api.com 检测（免费且可靠）
+  local country_code=""
+  if command -v curl >/dev/null 2>&1; then
+    country_code=$(curl -s --connect-timeout 5 --max-time 10 "http://ip-api.com/line?fields=countryCode" 2>/dev/null | head -n1)
+    if [ "$country_code" = "CN" ]; then
+      is_china=true
+    fi
+  fi
+  
+  # 方法2: 备用检测方式（通过访问速度测试）
+  if [ -z "$country_code" ] || [ "$country_code" != "CN" ]; then
+    log_info "使用备用检测方式..."
+    # 测试访问 GitHub 和国内镜像的速度
+    local github_time=999
+    local mirror_time=999
+    
+    if command -v curl >/dev/null 2>&1; then
+      # 测试 GitHub 访问速度 (超时5秒)
+      github_time=$(curl -s -w "%{time_total}" --connect-timeout 5 --max-time 5 -o /dev/null "https://github.com" 2>/dev/null | cut -d'.' -f1)
+      [ -z "$github_time" ] && github_time=999
+      
+      # 测试国内镜像访问速度 (超时5秒)  
+      mirror_time=$(curl -s -w "%{time_total}" --connect-timeout 5 --max-time 5 -o /dev/null "https://ghfast.top" 2>/dev/null | cut -d'.' -f1)
+      [ -z "$mirror_time" ] && mirror_time=999
+      
+      # 如果镜像访问明显更快，认为是国内网络环境
+      if [ "$mirror_time" -lt "$github_time" ] && [ "$mirror_time" -lt 3 ]; then
+        is_china=true
+      fi
+    fi
+  fi
+  
+  # 设置镜像源
+  if [ "$is_china" = true ]; then
+    RAW_PROXY="https://ghfast.top/"
+    export RELEASE_MIRROR="https://ghfast.top/"
+    log_success "检测到中国大陆网络环境，使用国内镜像加速: ghfast.top"
+  else
+    RAW_PROXY=""
+    export RELEASE_MIRROR=""
+    log_success "检测到海外网络环境，使用 GitHub 源"
+  fi
+}
 
 # 颜色定义
 RED='\033[0;31m'
@@ -27,6 +78,41 @@ require_root() {
 raw_url() {
   local path="$1"
   echo "${RAW_PROXY}${RAW_BASE_GH}/${path}"
+}
+
+# 带重试机制的下载函数
+download_with_fallback() {
+  local url="$1"
+  local max_retries=2
+  local retry_count=0
+  
+  while [ $retry_count -lt $max_retries ]; do
+    if curl -sSL "$url" 2>/dev/null; then
+      return 0
+    else
+      retry_count=$((retry_count + 1))
+      if [ $retry_count -lt $max_retries ]; then
+        log_warning "下载失败，尝试切换镜像源..."
+        # 切换镜像源
+        if [ -n "$RAW_PROXY" ]; then
+          # 当前使用镜像，切换到GitHub源
+          RAW_PROXY=""
+          export RELEASE_MIRROR=""
+          log_info "切换到 GitHub 源重试..."
+        else
+          # 当前使用GitHub源，切换到镜像
+          RAW_PROXY="https://ghfast.top/"
+          export RELEASE_MIRROR="https://ghfast.top/"
+          log_info "切换到国内镜像重试..."
+        fi
+        url="${RAW_PROXY}${RAW_BASE_GH}/${url##*/}"
+        sleep 2
+      fi
+    fi
+  done
+  
+  log_error "所有镜像源均下载失败"
+  return 1
 }
 
 log_info() {
@@ -70,7 +156,7 @@ ensure_jq() {
 # ---------- 服务端（主控） ----------
 server_install_update() {
   show_progress "安装/更新服务端（主控）"
-  if bash <(curl -sSL "$(raw_url scripts/install-server.sh)") 2>&1; then
+  if download_with_fallback "$(raw_url scripts/install-server.sh)" | bash 2>&1; then
     log_success "服务端（主控）安装/更新完成"
   else
     log_error "服务端（主控）安装/更新失败"
@@ -98,7 +184,7 @@ server_logs() {
 client_install_update() {
   show_progress "安装/更新客户端（被控）"
   RELEASE_MIRROR="${RELEASE_MIRROR:-${RAW_PROXY}}"
-  if bash <(curl -sSL "$(raw_url scripts/install-client.sh)") 2>&1; then
+  if download_with_fallback "$(raw_url scripts/install-client.sh)" | bash 2>&1; then
     log_success "客户端（被控）安装/更新完成"
   else
     log_error "客户端（被控）安装/更新失败"
@@ -216,20 +302,6 @@ set_beijing_time() {
   read -p "按 Enter 键继续..."
 }
 
-choose_mirror() {
-  echo -e "${PURPLE}================= 镜像选择 =================${NC}"
-  echo -e "${CYAN}当前镜像:${NC} ${RAW_PROXY:-GitHub 源}"
-  echo "1) 使用 GitHub 源"
-  echo "2) 使用中国大陆镜像(ghfast.top)"
-  read -rp "选择 [1-2]: " op
-  case "$op" in
-    1) RAW_PROXY=""; export RELEASE_MIRROR=""; log_success "已切换到 GitHub 源";;
-    2) RAW_PROXY="https://ghfast.top/"; export RELEASE_MIRROR="https://ghfast.top/"; log_success "已切换到中国大陆镜像";;
-    *) log_warning "无效选择";;
-  esac
-  read -p "按 Enter 键继续..."
-}
-
 # 检查快捷命令是否已安装
 check_shortcuts_installed() {
   [[ -f /usr/local/bin/bm ]] && [[ -f /usr/local/bin/status ]] && [[ -f /usr/local/bin/log ]] && [[ -f /usr/local/bin/restart ]]
@@ -283,8 +355,27 @@ fi
 
 REPO="annabeautiful1/bandwidth-monitor"
 RAW_BASE_GH="https://raw.githubusercontent.com/${REPO}/main"
-RAW_PROXY="https://ghfast.top/"
 
+# 自动检测镜像源
+auto_detect_mirror() {
+  local is_china=false
+  local country_code=""
+  
+  if command -v curl >/dev/null 2>&1; then
+    country_code=$(curl -s --connect-timeout 3 --max-time 5 "http://ip-api.com/line?fields=countryCode" 2>/dev/null | head -n1)
+    if [ "$country_code" = "CN" ]; then
+      is_china=true
+    fi
+  fi
+  
+  if [ "$is_china" = true ]; then
+    echo "https://ghfast.top/"
+  else
+    echo ""
+  fi
+}
+
+RAW_PROXY=$(auto_detect_mirror)
 bash <(curl -sSL "${RAW_PROXY}${RAW_BASE_GH}/scripts/bmctl.sh")
 EOF
 
@@ -316,15 +407,52 @@ EOF
 
 case "$1" in
   bm|bandwidth-monitor)
-    echo "选择要查看的日志:"
-    echo "1) 服务端（主控）日志"
-    echo "2) 客户端（被控）日志"
-    read -rp "选择 [1-2]: " choice
-    case "$choice" in
-      1) journalctl -u bandwidth-monitor -n 50 --no-pager -f;;
-      2) journalctl -u bandwidth-monitor-client -n 50 --no-pager -f;;
-      *) echo "无效选择";;
-    esac
+    # 自动检测安装的服务
+    server_installed=false
+    client_installed=false
+    
+    if systemctl list-unit-files bandwidth-monitor.service >/dev/null 2>&1 && systemctl is-enabled bandwidth-monitor >/dev/null 2>&1; then
+      server_installed=true
+    fi
+    
+    if systemctl list-unit-files bandwidth-monitor-client.service >/dev/null 2>&1 && systemctl is-enabled bandwidth-monitor-client >/dev/null 2>&1; then
+      client_installed=true
+    fi
+    
+    if [ "$server_installed" = true ] && [ "$client_installed" = true ]; then
+      echo "检测到同时安装了服务端和客户端，显示两者日志:"
+      echo
+      echo "================= 服务端（主控）日志 ================="
+      journalctl -u bandwidth-monitor -n 20 --no-pager
+      echo
+      echo "================= 客户端（被控）日志 ================="
+      journalctl -u bandwidth-monitor-client -n 20 --no-pager
+      echo
+      echo "实时日志监控中... (按 Ctrl+C 退出)"
+      echo "选择要监控的日志:"
+      echo "1 服务端（主控）实时日志"
+      echo "2 客户端（被控）实时日志" 
+      echo "3 同时监控两者（分屏显示）"
+      read -rp "选择 [1-3]: " choice
+      case "$choice" in
+        1) journalctl -u bandwidth-monitor -f;;
+        2) journalctl -u bandwidth-monitor-client -f;;
+        3) 
+          echo "同时监控服务端和客户端日志..."
+          journalctl -u bandwidth-monitor -u bandwidth-monitor-client -f
+          ;;
+        *) echo "无效选择，默认显示服务端日志"; journalctl -u bandwidth-monitor -f;;
+      esac
+    elif [ "$server_installed" = true ]; then
+      echo "检测到服务端（主控），显示服务端日志:"
+      journalctl -u bandwidth-monitor -n 50 --no-pager -f
+    elif [ "$client_installed" = true ]; then
+      echo "检测到客户端（被控），显示客户端日志:"
+      journalctl -u bandwidth-monitor-client -n 50 --no-pager -f
+    else
+      echo "未检测到任何 Bandwidth Monitor 服务"
+      echo "请先安装服务端或客户端"
+    fi
     ;;
   *)
     echo "用法: log bm"
@@ -389,15 +517,15 @@ config_menu() {
   while true; do
     clear
     echo -e "${PURPLE}================= 客户端（被控）配置修改 =================${NC}"
-    echo "1) 修改高峰期阈值 (22:00-02:00)"
-    echo "2) 修改低谷期阈值 (02:00-09:00)" 
-    echo "3) 修改平峰期阈值 (09:00-22:00)"
-    echo "4) 修改三个时间段"
-    echo "5) 修改客户端名称"
-    echo "6) 修改服务器地址"
-    echo "7) 修改上报间隔"
-    echo "8) 启用/关闭静态阈值"
-    echo "0) 返回主菜单"
+    echo "1 修改高峰期阈值 (22:00-02:00)"
+    echo "2 修改低谷期阈值 (02:00-09:00)" 
+    echo "3 修改平峰期阈值 (09:00-22:00)"
+    echo "4 修改三个时间段"
+    echo "5 修改客户端名称"
+    echo "6 修改服务器地址"
+    echo "7 修改上报间隔"
+    echo "8 启用/关闭静态阈值"
+    echo "0 返回主菜单"
     echo -e "${PURPLE}================================================${NC}"
     read -rp "请选择 [0-8]: " c
     case "$c" in
@@ -418,6 +546,9 @@ config_menu() {
 main_menu() {
   require_root
   
+  # 自动检测并设置镜像源
+  auto_detect_mirror
+  
   # 首次运行时自动安装快捷命令
   install_shortcuts_if_needed
   
@@ -427,21 +558,21 @@ main_menu() {
     echo -e "${PURPLE}║${NC}          ${CYAN}Bandwidth Monitor${NC} 控制面板         ${PURPLE}║${NC}"
     echo -e "${PURPLE}╚══════════════════════════════════════════╝${NC}"
     echo
-    echo -e "${CYAN}镜像:${NC} ${RAW_PROXY:-GitHub 源}    ${YELLOW}(m)${NC} 切换镜像"
+    echo -e "${CYAN}镜像源:${NC} ${RAW_PROXY:-GitHub 源}"
     echo
-    echo "1) 安装/更新服务端（主控）"
-    echo "2) 重启服务端（主控）" 
-    echo "3) 安装/更新客户端（被控）"
-    echo "4) 重启客户端（被控）"
-    echo "5) 客户端（被控）配置修改"
-    echo "6) 一键设置北京时间"
+    echo "1 安装/更新服务端（主控）"
+    echo "2 重启服务端（主控）" 
+    echo "3 安装/更新客户端（被控）"
+    echo "4 重启客户端（被控）"
+    echo "5 客户端（被控）配置修改"
+    echo "6 一键设置北京时间"
     echo
-    echo "7) 查看服务端（主控）日志"
-    echo "8) 查看客户端（被控）日志"
+    echo "7 查看服务端（主控）日志"
+    echo "8 查看客户端（被控）日志"
     echo
-    echo -e "${YELLOW}i)${NC} 安装/更新快捷命令    ${YELLOW}m)${NC} 切换镜像源    ${RED}q)${NC} 退出"
+    echo -e "${YELLOW}i${NC} 安装/更新快捷命令    ${RED}0${NC} 退出"
     echo -e "${PURPLE}================================================${NC}"
-    read -rp "请选择 [1-8,i,m,q]: " a
+    read -rp "请选择 [0-8,i]: " a
     case "$a" in
       1) server_install_update;;
       2) server_restart;;
@@ -452,8 +583,7 @@ main_menu() {
       7) server_logs;;
       8) client_logs;;
       i|I) install_shortcuts;;
-      m|M) choose_mirror;;
-      q|Q) echo -e "${GREEN}感谢使用！${NC}"; exit 0;;
+      0) echo -e "${GREEN}感谢使用！${NC}"; exit 0;;
       *) log_warning "无效选择"; sleep 1;;
     esac
   done
