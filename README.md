@@ -1,5 +1,20 @@
 # 🚀 带宽监控系统 (Bandwidth Monitor)
 
+### 一键控制脚本（Github 与国内镜像）
+- Github 源
+```bash
+bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
+```
+- 中国大陆镜像（ghproxy）
+```bash
+bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
+```
+> 脚本提供：
+> - 服务端：安装/更新主控、查看服务端日志
+> - 客户端：安装/更新被控、查看客户端日志
+> - 配置修改（客户端）：高峰/低谷阈值、峰谷时间段、名称、对接地址、上报间隔、启用/关闭静态阈值
+> - 系统时间：一键设置为北京时间
+
 一个轻量级的分布式带宽监控系统，支持实时监控服务器带宽使用情况，并在带宽异常时通过Telegram发送告警通知。
 
 ## ✨ 功能特点
