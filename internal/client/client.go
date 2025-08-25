@@ -91,16 +91,37 @@ func (c *Client) configWatcher() {
 
 	ticker := time.NewTicker(5 * time.Second) // 每5秒检查一次配置文件
 	defer ticker.Stop()
+	
+	// 记录启动时的时区，用于检测时区变化
+	var lastTimezoneOffset int
+	_, lastTimezoneOffset = time.Now().Zone()
 
 	for {
 		select {
 		case <-ticker.C:
+			// 检查配置文件更新
 			if c.checkConfigUpdate() {
 				if err := c.reloadConfig(); err != nil {
 					log.Printf("重载配置失败: %v", err)
 				} else {
 					log.Printf("配置文件已重载")
 				}
+			}
+			
+			// 检查时区是否发生变化
+			_, currentTimezoneOffset := time.Now().Zone()
+			if currentTimezoneOffset != lastTimezoneOffset {
+				log.Printf("检测到系统时区变化，建议重启服务以确保时间计算准确")
+				log.Printf("当前时区偏移: %d 秒，之前: %d 秒", currentTimezoneOffset, lastTimezoneOffset)
+				lastTimezoneOffset = currentTimezoneOffset
+				
+				// 记录当前时间用于调试
+				now := time.Now()
+				log.Printf("当前时间: %s (UTC%+d)", now.Format("2006-01-02 15:04:05"), currentTimezoneOffset/3600)
+				
+				// 重新计算当前阈值
+				threshold := c.getEffectiveThresholdMbps(now)
+				log.Printf("基于新时区计算的当前阈值: %.2f Mbps", threshold)
 			}
 		case <-c.stopChan:
 			return
@@ -193,7 +214,13 @@ func (c *Client) reportMetrics() error {
 		return fmt.Errorf("收集指标失败: %v", err)
 	}
 
-	effectiveThreshold := c.getEffectiveThresholdMbps(time.Now())
+	now := time.Now()
+	effectiveThreshold := c.getEffectiveThresholdMbps(now)
+	
+	// 添加时区和阈值计算的详细日志
+	zoneName, zoneOffset := now.Zone()
+	log.Printf("当前时间: %s, 时区: %s (UTC%+d), 当前阈值: %.2f Mbps", 
+		now.Format("2006-01-02 15:04:05"), zoneName, zoneOffset/3600, effectiveThreshold)
 
 	c.configMutex.RLock()
 	password := c.config.Password
@@ -432,18 +459,28 @@ func isVirtualName(name string) bool {
 func (c *Client) getEffectiveThresholdMbps(now time.Time) float64 {
 	thresholdConfig := c.getThresholdConfig()
 
+	// 记录当前时间详情用于调试
+	log.Printf("阈值计算 - 当前时间: %s, 小时: %d, 分钟: %d", 
+		now.Format("15:04:05"), now.Hour(), now.Minute())
+
 	// 动态阈值
-	for _, w := range thresholdConfig.Dynamic {
+	for i, w := range thresholdConfig.Dynamic {
 		if inWindow(now, w.Start, w.End) {
+			log.Printf("匹配到动态阈值窗口[%d]: %s-%s, 阈值: %.2f Mbps", 
+				i, w.Start, w.End, w.BandwidthMbps)
 			if w.BandwidthMbps > 0 {
 				return w.BandwidthMbps
 			}
 		}
 	}
+	
 	// 静态阈值
 	if thresholdConfig.StaticBandwidthMbps > 0 {
+		log.Printf("使用静态阈值: %.2f Mbps", thresholdConfig.StaticBandwidthMbps)
 		return thresholdConfig.StaticBandwidthMbps
 	}
+	
+	log.Printf("未匹配任何阈值，使用默认值 0")
 	return 0
 }
 
@@ -451,14 +488,26 @@ func inWindow(now time.Time, startHHMM, endHHMM string) bool {
 	start, ok1 := parseHHMM(startHHMM)
 	end, ok2 := parseHHMM(endHHMM)
 	if !ok1 || !ok2 {
+		log.Printf("时间窗口解析失败: %s-%s", startHHMM, endHHMM)
 		return false
 	}
+	
 	mins := now.Hour()*60 + now.Minute()
+	var result bool
+	
 	if start <= end {
-		return mins >= start && mins < end
+		// 同一天内的时间窗口，如 09:00-22:00
+		result = mins >= start && mins < end
+		log.Printf("检查时间窗口 %s-%s (同日): 当前%d分钟, 区间[%d-%d), 匹配: %t", 
+			startHHMM, endHHMM, mins, start, end, result)
+	} else {
+		// 跨午夜窗口，例如 22:00-02:00  
+		result = mins >= start || mins < end
+		log.Printf("检查时间窗口 %s-%s (跨日): 当前%d分钟, 区间[%d-1440)|[0-%d), 匹配: %t", 
+			startHHMM, endHHMM, mins, start, end, result)
 	}
-	// 跨午夜窗口，例如 22:00-02:00
-	return mins >= start || mins < end
+	
+	return result
 }
 
 func parseHHMM(s string) (int, bool) {
