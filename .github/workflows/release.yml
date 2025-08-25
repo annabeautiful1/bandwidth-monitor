@@ -95,23 +95,34 @@ jobs:
         tag_name: ${{ github.ref_name }}
         name: 带宽监控系统 ${{ github.ref_name }}
         body: |
-          ## 🎉 带宽监控系统发布
+          ## 🎉 带宽监控系统 ${{ github.ref_name }} 发布
           
-          ### 📋 功能特点
-          - ✅ 实时监控服务器带宽和系统资源
-          - ✅ 带宽异常时Telegram告警通知  
-          - ✅ 节点离线/上线状态监控
-          - ✅ 轻量级设计，资源占用少
-          - ✅ 一键安装脚本，部署简单
+          ### 🚀 v0.3.0 主要新功能
+          - 🔥 **时区热更新**：支持无需重启的系统时区变更自动应用
+          - 💻 **CPU/内存监控**：新增CPU和内存使用率告警（默认95%阈值）
+          - ⚙️ **配置自动升级**：程序启动时自动补全缺失的默认配置项
+          - 📊 **带宽检测优化**：改为取上下行最小值进行更准确的瓶颈检测
+          - 🔔 **多类型告警**：支持带宽、CPU、内存、离线四种Telegram通知
           
-          ### 📦 安装方法
+          ### 🛠️ 重要改进
+          - 📋 统一配置文件格式，确保所有客户端配置一致性
+          - 🧹 代码优化清理，移除废弃函数，提升维护性
+          - 🔒 线程安全的时区和配置管理机制
+          - 🔄 配置热重载支持，减少服务重启需求
           
-          **服务端安装:**
+          ### 📦 快速安装/升级
+          
+          **一键控制脚本（推荐）:**
+          ```bash
+          sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
+          ```
+          
+          **服务端安装/升级:**
           ```bash
           curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
           ```
           
-          **客户端安装:**
+          **客户端安装/升级:**
           ```bash  
           curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
           ```
@@ -121,13 +132,20 @@ jobs:
           - Windows (amd64) 
           - macOS (amd64/arm64)
           
-          ### 📖 使用说明
-          1. 先在监控服务器上安装服务端程序
-          2. 配置Telegram机器人(可选)
-          3. 在被监控服务器上安装客户端程序
-          4. 客户端会自动向服务端上报监控数据
+          ### ✨ 升级亮点
+          - ✅ **无需手动修改配置**：程序自动升级配置文件并添加默认值
+          - ✅ **保留现有设置**：升级过程完全保持用户自定义配置
+          - ✅ **热重载支持**：时区、配置变更无需重启服务
+          - ✅ **智能告警**：防重复通知，状态变化时精准提醒
           
-          完整文档请查看项目README.md
+          ### 🔧 配置兼容性
+          本版本自动为配置文件添加以下默认值：
+          - CPU告警阈值：95%
+          - 内存告警阈值：95%  
+          - 动态阈值时段：自动升级到3时段配置
+          - 其他缺失的必要参数
+          
+          详细变更记录请查看 [RELEASE_NOTES.md](https://github.com/annabeautiful1/bandwidth-monitor/blob/main/RELEASE_NOTES.md)
         draft: false
         prerelease: false
         files: |
