@@ -159,6 +159,17 @@ else
     done
 fi
 
+# 阈值设置（客户端侧，支持动态窗口）
+# 静态阈值（可选，0 表示不启用静态）
+STATIC_BW="${STATIC_BW:-0}"
+# 动态窗口默认：10:00-02:00 200Mbps，02:00-10:00 50Mbps
+DAY_START="${DAY_START:-10:00}"
+DAY_END="${DAY_END:-02:00}"
+DAY_BW="${DAY_BW:-200}"
+NIGHT_START="${NIGHT_START:-02:00}"
+NIGHT_END="${NIGHT_END:-10:00}"
+NIGHT_BW="${NIGHT_BW:-50}"
+
 # 生成配置文件
 echo -e "${YELLOW}正在生成配置文件...${NC}"
 cat > "$CONFIG_FILE" << EOF
@@ -167,7 +178,14 @@ cat > "$CONFIG_FILE" << EOF
   "server_url": "$server_url",
   "hostname": "$hostname",
   "report_interval_seconds": $report_interval,
-  "interface_name": "${iface}"
+  "interface_name": "${iface}",
+  "threshold": {
+    "static_bandwidth_mbps": ${STATIC_BW},
+    "dynamic": [
+      {"start": "${DAY_START}", "end": "${DAY_END}", "bandwidth_mbps": ${DAY_BW}},
+      {"start": "${NIGHT_START}", "end": "${NIGHT_END}", "bandwidth_mbps": ${NIGHT_BW}}
+    ]
+  }
 }
 EOF
 
@@ -219,6 +237,7 @@ echo "  - 服务器地址: $server_url"
 echo "  - 节点名称: $hostname"
 echo "  - 上报间隔: ${report_interval}秒"
 echo "  - 监控网卡: ${iface:-自动选择}"
+echo "  - 阈值: 静态=${STATIC_BW}Mbps; 动态=[${DAY_START}-${DAY_END}:${DAY_BW}Mbps, ${NIGHT_START}-${NIGHT_END}:${NIGHT_BW}Mbps]"
 echo "  - 服务名称: $SERVICE_NAME"
 echo
 

@@ -32,7 +32,7 @@ func main() {
 		if config.InterfaceName != "" {
 			log.Printf("指定网卡: %s", config.InterfaceName)
 		}
-		
+
 		if err := c.Start(); err != nil {
 			log.Fatalf("客户端运行失败: %v", err)
 		}
@@ -59,10 +59,10 @@ func loadConfig(path string) (*models.ClientConfig, error) {
 
 		defaultConfig := &models.ClientConfig{
 			Password:              "your-password-here",
-			ServerURL:            "http://your-server.com:8080",
-			Hostname:             hostname,
+			ServerURL:             "http://your-server.com:8080",
+			Hostname:              hostname,
 			ReportIntervalSeconds: 60,
-			InterfaceName:        "", // 留空将自动选择非回环网卡
+			InterfaceName:         "", // 留空将自动选择非回环网卡
 		}
 
 		if err := saveConfig(path, defaultConfig); err != nil {

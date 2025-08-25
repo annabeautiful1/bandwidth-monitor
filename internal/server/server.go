@@ -70,8 +70,8 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 更新节点状态
-	s.updateNodeStatus(req.Hostname, req.Metrics)
+	// 更新节点状态（包含客户端上报的阈值）
+	s.updateNodeStatus(req.Hostname, req.Metrics, req.EffectiveThresholdMbps)
 
 	s.sendResponse(w, true, "上报成功", nil)
 }
@@ -102,7 +102,7 @@ func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 	s.sendResponse(w, true, "测试消息发送成功", nil)
 }
 
-func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics) {
+func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics, thresholdMbps float64) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -113,10 +113,11 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics)
 	node, exists := s.nodes[hostname]
 	if !exists {
 		node = &models.NodeStatus{
-			Hostname:         hostname,
-			IsOnline:         true,
-			BandwidthAlerted: false,
-			ReportSamples:    0,
+			Hostname:          hostname,
+			IsOnline:          true,
+			BandwidthAlerted:  false,
+			ReportSamples:     0,
+			LastThresholdMbps: thresholdMbps,
 		}
 		s.nodes[hostname] = node
 		log.Printf("新节点上线: %s", hostname)
@@ -129,6 +130,9 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics)
 	node.Metrics = metrics
 	node.IsOnline = true
 	node.ReportSamples++
+	if thresholdMbps > 0 {
+		node.LastThresholdMbps = thresholdMbps
+	}
 
 	// 如果节点重新上线，发送通知
 	if wasOffline && s.tgBot != nil {
@@ -152,8 +156,14 @@ func (s *Server) checkBandwidthAlert(node *models.NodeStatus) {
 		currentMbps = outMbps
 	}
 
+	// 取客户端上报阈值，若无则回退到服务端全局阈值
+	threshold := node.LastThresholdMbps
+	if threshold <= 0 {
+		threshold = s.config.Thresholds.BandwidthMbps
+	}
+
 	// 检查是否需要告警
-	if currentMbps < s.config.Thresholds.BandwidthMbps {
+	if currentMbps < threshold {
 		if !node.BandwidthAlerted {
 			// 第一次触发告警
 			node.BandwidthAlerted = true
@@ -161,13 +171,13 @@ func (s *Server) checkBandwidthAlert(node *models.NodeStatus) {
 				if err := s.tgBot.SendBandwidthAlert(
 					node.Hostname,
 					currentMbps,
-					s.config.Thresholds.BandwidthMbps,
+					threshold,
 				); err != nil {
 					log.Printf("发送带宽告警失败: %v", err)
 				}
 			}
 			log.Printf("节点 %s 带宽告警: %.2f Mbps < %.2f Mbps",
-				node.Hostname, currentMbps, s.config.Thresholds.BandwidthMbps)
+				node.Hostname, currentMbps, threshold)
 		}
 	} else {
 		// 带宽恢复正常

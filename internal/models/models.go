@@ -27,13 +27,27 @@ type Threshold struct {
 	OfflineSeconds int     `json:"offline_seconds"`
 }
 
+// TimeWindowThreshold 按时间窗口动态阈值
+type TimeWindowThreshold struct {
+	Start         string  `json:"start"` // HH:MM
+	End           string  `json:"end"`   // HH:MM
+	BandwidthMbps float64 `json:"bandwidth_mbps"`
+}
+
+// ClientThresholdConfig 客户端阈值（静态 + 动态表）
+type ClientThresholdConfig struct {
+	StaticBandwidthMbps float64               `json:"static_bandwidth_mbps"`
+	Dynamic             []TimeWindowThreshold `json:"dynamic"`
+}
+
 // ClientConfig 客户端配置
 type ClientConfig struct {
-	Password              string `json:"password"`
-	ServerURL             string `json:"server_url"`
-	Hostname              string `json:"hostname"`
-	ReportIntervalSeconds int    `json:"report_interval_seconds"`
-	InterfaceName         string `json:"interface_name"`
+	Password              string                `json:"password"`
+	ServerURL             string                `json:"server_url"`
+	Hostname              string                `json:"hostname"`
+	ReportIntervalSeconds int                   `json:"report_interval_seconds"`
+	InterfaceName         string                `json:"interface_name"`
+	Threshold             ClientThresholdConfig `json:"threshold"`
 }
 
 // SystemMetrics 系统指标数据
@@ -48,20 +62,22 @@ type SystemMetrics struct {
 
 // ReportRequest 上报请求
 type ReportRequest struct {
-	Password  string        `json:"password"`
-	Hostname  string        `json:"hostname"`
-	Timestamp int64         `json:"timestamp"`
-	Metrics   SystemMetrics `json:"metrics"`
+	Password               string        `json:"password"`
+	Hostname               string        `json:"hostname"`
+	Timestamp              int64         `json:"timestamp"`
+	Metrics                SystemMetrics `json:"metrics"`
+	EffectiveThresholdMbps float64       `json:"effective_threshold_mbps"`
 }
 
 // NodeStatus 节点状态
 type NodeStatus struct {
-	Hostname         string        `json:"hostname"`
-	LastSeen         time.Time     `json:"last_seen"`
-	Metrics          SystemMetrics `json:"metrics"`
-	IsOnline         bool          `json:"is_online"`
-	BandwidthAlerted bool          `json:"bandwidth_alerted"`
-	ReportSamples    int           `json:"report_samples"`
+	Hostname          string        `json:"hostname"`
+	LastSeen          time.Time     `json:"last_seen"`
+	Metrics           SystemMetrics `json:"metrics"`
+	IsOnline          bool          `json:"is_online"`
+	BandwidthAlerted  bool          `json:"bandwidth_alerted"`
+	ReportSamples     int           `json:"report_samples"`
+	LastThresholdMbps float64       `json:"last_threshold_mbps"`
 }
 
 // APIResponse 通用API响应

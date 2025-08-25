@@ -75,11 +75,14 @@ func (c *Client) reportMetrics() error {
 		return fmt.Errorf("收集指标失败: %v", err)
 	}
 
+	effectiveThreshold := c.getEffectiveThresholdMbps(time.Now())
+
 	request := models.ReportRequest{
-		Password:  c.config.Password,
-		Hostname:  c.config.Hostname,
-		Timestamp: time.Now().Unix(),
-		Metrics:   *metrics,
+		Password:               c.config.Password,
+		Hostname:               c.config.Hostname,
+		Timestamp:              time.Now().Unix(),
+		Metrics:                *metrics,
+		EffectiveThresholdMbps: effectiveThreshold,
 	}
 
 	return c.sendReport(request)
@@ -200,12 +203,13 @@ func (c *Client) sendReport(request models.ReportRequest) error {
 		return fmt.Errorf("服务器返回错误: %s", response.Message)
 	}
 
-	log.Printf("上报成功 - CPU: %.1f%%, 内存: %s/%s, 网络: ↓%.2fMbps ↑%.2fMbps",
+	log.Printf("上报成功 - CPU: %.1f%%, 内存: %s/%s, 网络: ↓%.2fMbps ↑%.2fMbps (阈值: %.2fMbps)",
 		request.Metrics.CPUPercent,
 		formatBytes(request.Metrics.MemoryUsed),
 		formatBytes(request.Metrics.MemoryTotal),
 		float64(request.Metrics.NetworkInBps)/125000.0,
 		float64(request.Metrics.NetworkOutBps)/125000.0,
+		request.EffectiveThresholdMbps,
 	)
 
 	return nil
@@ -249,4 +253,47 @@ func isVirtualName(name string) bool {
 		}
 	}
 	return false
+}
+
+// getEffectiveThresholdMbps 计算当前时间的有效阈值（动态优先，fallback到静态）
+func (c *Client) getEffectiveThresholdMbps(now time.Time) float64 {
+	// 动态阈值
+	for _, w := range c.config.Threshold.Dynamic {
+		if inWindow(now, w.Start, w.End) {
+			if w.BandwidthMbps > 0 {
+				return w.BandwidthMbps
+			}
+		}
+	}
+	// 静态阈值
+	if c.config.Threshold.StaticBandwidthMbps > 0 {
+		return c.config.Threshold.StaticBandwidthMbps
+	}
+	return 0
+}
+
+func inWindow(now time.Time, startHHMM, endHHMM string) bool {
+	start, ok1 := parseHHMM(startHHMM)
+	end, ok2 := parseHHMM(endHHMM)
+	if !ok1 || !ok2 {
+		return false
+	}
+	mins := now.Hour()*60 + now.Minute()
+	if start <= end {
+		return mins >= start && mins < end
+	}
+	// 跨午夜窗口，例如 22:00-02:00
+	return mins >= start || mins < end
+}
+
+func parseHHMM(s string) (int, bool) {
+	if len(s) != 5 || s[2] != ':' {
+		return 0, false
+	}
+	h := int(s[0]-'0')*10 + int(s[1]-'0')
+	m := int(s[3]-'0')*10 + int(s[4]-'0')
+	if h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	return h*60 + m, true
 }
