@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	_ "time/tzdata" // 内嵌时区数据
 
 	"bandwidth-monitor/internal/models"
 
@@ -29,17 +30,20 @@ type Client struct {
 	lastNetStats  map[string]net.IOCountersStat
 	lastSampleAt  time.Time
 	configModTime time.Time
+	currentTZ     *time.Location // 当前时区
+	tzMutex       sync.RWMutex   // 时区读写锁
 }
 
 func NewClient(config *models.ClientConfig, configPath string) *Client {
 	return &Client{
-		config:     config,
-		configPath: configPath,
+		config:       config,
+		configPath:   configPath,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 		stopChan:     make(chan struct{}),
 		lastNetStats: make(map[string]net.IOCountersStat),
+		currentTZ:    time.Local, // 初始化为本地时区
 	}
 }
 
@@ -85,6 +89,64 @@ func (c *Client) Start() error {
 	}
 }
 
+// reloadSystemTimezone 重新加载系统时区
+func (c *Client) reloadSystemTimezone() error {
+	c.tzMutex.Lock()
+	defer c.tzMutex.Unlock()
+	
+	// 读取系统时区文件
+	var newLocation *time.Location
+	var err error
+	
+	// 尝试从 /etc/timezone 读取时区名称（Debian/Ubuntu）
+	if tzData, readErr := os.ReadFile("/etc/timezone"); readErr == nil {
+		tzName := strings.TrimSpace(string(tzData))
+		if newLocation, err = time.LoadLocation(tzName); err == nil {
+			log.Printf("从 /etc/timezone 加载时区: %s", tzName)
+		}
+	}
+	
+	// 如果上面失败，尝试解析 /etc/localtime 软链接（RedHat/CentOS）
+	if newLocation == nil {
+		if linkTarget, readErr := os.Readlink("/etc/localtime"); readErr == nil {
+			// /etc/localtime -> /usr/share/zoneinfo/Asia/Shanghai
+			if idx := strings.Index(linkTarget, "zoneinfo/"); idx != -1 {
+				tzName := linkTarget[idx+9:]
+				if newLocation, err = time.LoadLocation(tzName); err == nil {
+					log.Printf("从 /etc/localtime 软链接加载时区: %s", tzName)
+				}
+			}
+		}
+	}
+	
+	// 如果都失败了，保持当前时区
+	if newLocation == nil {
+		log.Printf("无法重载系统时区，保持当前时区: %s", c.currentTZ.String())
+		return fmt.Errorf("无法重载系统时区: %v", err)
+	}
+	
+	// 检查时区是否真的改变了
+	oldTZ := c.currentTZ
+	if oldTZ.String() != newLocation.String() {
+		c.currentTZ = newLocation
+		log.Printf("系统时区已热重载: %s -> %s", oldTZ.String(), newLocation.String())
+		
+		// 测试新时区
+		now := c.now()
+		log.Printf("新时区当前时间: %s", now.Format("2006-01-02 15:04:05 MST"))
+		return nil
+	}
+	
+	return nil
+}
+
+// now 返回使用当前时区的时间
+func (c *Client) now() time.Time {
+	c.tzMutex.RLock()
+	defer c.tzMutex.RUnlock()
+	return time.Now().In(c.currentTZ)
+}
+
 // configWatcher 配置文件监控器
 func (c *Client) configWatcher() {
 	defer c.wg.Done()
@@ -95,12 +157,18 @@ func (c *Client) configWatcher() {
 	for {
 		select {
 		case <-ticker.C:
+			// 检查配置文件更新
 			if c.checkConfigUpdate() {
 				if err := c.reloadConfig(); err != nil {
 					log.Printf("重载配置失败: %v", err)
 				} else {
 					log.Printf("配置文件已重载")
 				}
+			}
+			
+			// 尝试重载系统时区
+			if err := c.reloadSystemTimezone(); err != nil {
+				// 静默处理时区重载错误，不影响主要功能
 			}
 		case <-c.stopChan:
 			return
@@ -193,7 +261,13 @@ func (c *Client) reportMetrics() error {
 		return fmt.Errorf("收集指标失败: %v", err)
 	}
 
-	effectiveThreshold := c.getEffectiveThresholdMbps(time.Now())
+	now := c.now()
+	effectiveThreshold := c.getEffectiveThresholdMbps(now)
+	
+	// 添加时区和阈值计算的详细日志
+	zoneName, zoneOffset := now.Zone()
+	log.Printf("当前时间: %s, 时区: %s (UTC%+d), 当前阈值: %.2f Mbps", 
+		now.Format("2006-01-02 15:04:05"), zoneName, zoneOffset/3600, effectiveThreshold)
 
 	c.configMutex.RLock()
 	password := c.config.Password
@@ -204,7 +278,7 @@ func (c *Client) reportMetrics() error {
 	request := models.ReportRequest{
 		Password:               password,
 		Hostname:               hostname,
-		Timestamp:              time.Now().Unix(),
+		Timestamp:              now.Unix(),
 		Metrics:                *metrics,
 		EffectiveThresholdMbps: effectiveThreshold,
 	}
@@ -435,15 +509,18 @@ func (c *Client) getEffectiveThresholdMbps(now time.Time) float64 {
 	// 动态阈值
 	for _, w := range thresholdConfig.Dynamic {
 		if inWindow(now, w.Start, w.End) {
+			// 只在阈值变化时记录日志
 			if w.BandwidthMbps > 0 {
 				return w.BandwidthMbps
 			}
 		}
 	}
+	
 	// 静态阈值
 	if thresholdConfig.StaticBandwidthMbps > 0 {
 		return thresholdConfig.StaticBandwidthMbps
 	}
+	
 	return 0
 }
 
@@ -453,12 +530,16 @@ func inWindow(now time.Time, startHHMM, endHHMM string) bool {
 	if !ok1 || !ok2 {
 		return false
 	}
+	
 	mins := now.Hour()*60 + now.Minute()
+	
 	if start <= end {
+		// 同一天内的时间窗口，如 09:00-22:00
 		return mins >= start && mins < end
+	} else {
+		// 跨午夜窗口，例如 22:00-02:00  
+		return mins >= start || mins < end
 	}
-	// 跨午夜窗口，例如 22:00-02:00
-	return mins >= start || mins < end
 }
 
 func parseHHMM(s string) (int, bool) {

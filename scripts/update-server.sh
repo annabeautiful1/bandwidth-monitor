@@ -16,7 +16,7 @@ case "$ARCH" in
   aarch64) FILE="bandwidth-monitor-server-linux-arm64" ;;
   *) echo "不支持的架构: $ARCH"; exit 1 ;;
 esac
-# 可通过 RELEASE_MIRROR 指定镜像前缀（例如 https://ghproxy.com/）
+# 可通过 RELEASE_MIRROR 指定镜像前缀（例如 https://ghfast.top/）
 BASE_GH="https://github.com"
 if [ -n "${RELEASE_MIRROR:-}" ]; then
   BASE_GH="$RELEASE_MIRROR"

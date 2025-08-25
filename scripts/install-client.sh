@@ -56,7 +56,7 @@ fi
 
 echo -e "${GREEN}最新版本: $LATEST_VERSION${NC}"
 
-# 下载URL（可通过 RELEASE_MIRROR 指定镜像前缀，例如 https://ghproxy.com/）
+# 下载URL（可通过 RELEASE_MIRROR 指定镜像前缀，例如 https://ghfast.top/）
 BASE_GH="https://github.com"
 if [ -n "${RELEASE_MIRROR:-}" ]; then
     BASE_GH="$RELEASE_MIRROR"
