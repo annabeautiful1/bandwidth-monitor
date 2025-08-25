@@ -18,12 +18,20 @@ case "$ARCH" in
 esac
 URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST}/${FILE}"
 
+echo "停止服务: $SERVICE_NAME (若不存在将忽略)"
+systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+
 echo "下载: $URL"
 mkdir -p "$INSTALL_DIR"
-curl -L -o "$BIN" "$URL"
-chmod +x "$BIN"
+TMP_FILE=$(mktemp /tmp/server.XXXXXX)
+curl -L --fail -o "$TMP_FILE" "$URL"
+chmod +x "$TMP_FILE"
 
-systemctl restart "$SERVICE_NAME"
+echo "替换二进制..."
+mv -f "$TMP_FILE" "$BIN"
+
+echo "启动服务: $SERVICE_NAME"
+systemctl start "$SERVICE_NAME"
 systemctl status "$SERVICE_NAME" --no-pager || true
 
 echo "✓ 更新完成 -> $LATEST"
