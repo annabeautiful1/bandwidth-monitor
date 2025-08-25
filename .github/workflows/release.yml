@@ -1,0 +1,232 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            goos: linux
+            goarch: amd64
+          - os: linux
+            arch: arm64
+            goos: linux
+            goarch: arm64
+          - os: windows
+            arch: amd64
+            goos: windows
+            goarch: amd64
+            ext: .exe
+          - os: darwin
+            arch: amd64
+            goos: darwin
+            goarch: amd64
+          - os: darwin
+            arch: arm64
+            goos: darwin
+            goarch: arm64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build Server
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        mkdir -p dist
+        go build -ldflags="-s -w" -o dist/bandwidth-monitor-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/server
+
+    - name: Build Client  
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -ldflags="-s -w" -o dist/bandwidth-monitor-client-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/client
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ matrix.os }}-${{ matrix.arch }}
+        path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release files
+      run: |
+        mkdir -p release
+        find artifacts -type f -exec cp {} release/ \;
+        ls -la release/
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: 带宽监控系统 ${{ github.ref }}
+        body: |
+          ## 🎉 带宽监控系统发布
+          
+          ### 📋 功能特点
+          - ✅ 实时监控服务器带宽和系统资源
+          - ✅ 带宽异常时Telegram告警通知  
+          - ✅ 节点离线/上线状态监控
+          - ✅ 轻量级设计，资源占用少
+          - ✅ 一键安装脚本，部署简单
+          
+          ### 📦 安装方法
+          
+          **服务端安装:**
+          ```bash
+          curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
+          ```
+          
+          **客户端安装:**
+          ```bash  
+          curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
+          ```
+          
+          ### 🏗️ 支持平台
+          - Linux (amd64/arm64)
+          - Windows (amd64) 
+          - macOS (amd64/arm64)
+          
+          ### 📖 使用说明
+          1. 先在监控服务器上安装服务端程序
+          2. 配置Telegram机器人(可选)
+          3. 在被监控服务器上安装客户端程序
+          4. 客户端会自动向服务端上报监控数据
+          
+          完整文档请查看项目README.md
+        draft: false
+        prerelease: false
+
+    - name: Upload Server Linux AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-server-linux-amd64
+        asset_name: bandwidth-monitor-server-linux-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Client Linux AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-client-linux-amd64
+        asset_name: bandwidth-monitor-client-linux-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Server Linux ARM64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-server-linux-arm64
+        asset_name: bandwidth-monitor-server-linux-arm64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Client Linux ARM64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-client-linux-arm64
+        asset_name: bandwidth-monitor-client-linux-arm64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Server Windows AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-server-windows-amd64.exe
+        asset_name: bandwidth-monitor-server-windows-amd64.exe
+        asset_content_type: application/octet-stream
+
+    - name: Upload Client Windows AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-client-windows-amd64.exe
+        asset_name: bandwidth-monitor-client-windows-amd64.exe
+        asset_content_type: application/octet-stream
+
+    - name: Upload Server macOS AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-server-darwin-amd64
+        asset_name: bandwidth-monitor-server-darwin-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Client macOS AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-client-darwin-amd64
+        asset_name: bandwidth-monitor-client-darwin-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Server macOS ARM64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-server-darwin-arm64
+        asset_name: bandwidth-monitor-server-darwin-arm64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Client macOS ARM64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/bandwidth-monitor-client-darwin-arm64
+        asset_name: bandwidth-monitor-client-darwin-arm64
+        asset_content_type: application/octet-stream
