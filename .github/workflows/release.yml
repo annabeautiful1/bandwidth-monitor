@@ -89,14 +89,11 @@ jobs:
         find artifacts -type f -exec cp {} release/ \;
         ls -la release/
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create/Update Release and Upload Assets
+      uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
-        release_name: 带宽监控系统 ${{ github.ref_name }}
+        name: 带宽监控系统 ${{ github.ref_name }}
         body: |
           ## 🎉 带宽监控系统发布
           
@@ -133,103 +130,9 @@ jobs:
           完整文档请查看项目README.md
         draft: false
         prerelease: false
-
-    - name: Upload Server Linux AMD64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-server-linux-amd64
-        asset_name: bandwidth-monitor-server-linux-amd64
-        asset_content_type: application/octet-stream
-
-    - name: Upload Client Linux AMD64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-client-linux-amd64
-        asset_name: bandwidth-monitor-client-linux-amd64
-        asset_content_type: application/octet-stream
-
-    - name: Upload Server Linux ARM64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-server-linux-arm64
-        asset_name: bandwidth-monitor-server-linux-arm64
-        asset_content_type: application/octet-stream
-
-    - name: Upload Client Linux ARM64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-client-linux-arm64
-        asset_name: bandwidth-monitor-client-linux-arm64
-        asset_content_type: application/octet-stream
-
-    - name: Upload Server Windows AMD64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-server-windows-amd64.exe
-        asset_name: bandwidth-monitor-server-windows-amd64.exe
-        asset_content_type: application/octet-stream
-
-    - name: Upload Client Windows AMD64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-client-windows-amd64.exe
-        asset_name: bandwidth-monitor-client-windows-amd64.exe
-        asset_content_type: application/octet-stream
-
-    - name: Upload Server macOS AMD64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-server-darwin-amd64
-        asset_name: bandwidth-monitor-server-darwin-amd64
-        asset_content_type: application/octet-stream
-
-    - name: Upload Client macOS AMD64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-client-darwin-amd64
-        asset_name: bandwidth-monitor-client-darwin-amd64
-        asset_content_type: application/octet-stream
-
-    - name: Upload Server macOS ARM64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-server-darwin-arm64
-        asset_name: bandwidth-monitor-server-darwin-arm64
-        asset_content_type: application/octet-stream
-
-    - name: Upload Client macOS ARM64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./release/bandwidth-monitor-client-darwin-arm64
-        asset_name: bandwidth-monitor-client-darwin-arm64
-        asset_content_type: application/octet-stream
+        files: |
+          release/*
+        fail_on_unmatched_files: true
+        generate_release_notes: true
+        make_latest: true
+        token: ${{ secrets.GITHUB_TOKEN }}
