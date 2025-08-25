@@ -108,10 +108,12 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics,
 
 	now := time.Now()
 	wasOffline := false
+	isNew := false
 
 	// 检查节点是否存在
 	node, exists := s.nodes[hostname]
 	if !exists {
+		isNew = true
 		node = &models.NodeStatus{
 			Hostname:          hostname,
 			IsOnline:          true,
@@ -134,10 +136,12 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics,
 		node.LastThresholdMbps = thresholdMbps
 	}
 
-	// 如果节点重新上线，发送通知
-	if wasOffline && s.tgBot != nil {
-		if err := s.tgBot.SendOnlineAlert(hostname); err != nil {
-			log.Printf("发送上线告警失败: %v", err)
+	// 如果节点首次出现或重新上线，发送通知
+	if s.tgBot != nil {
+		if isNew || wasOffline {
+			if err := s.tgBot.SendOnlineAlert(hostname); err != nil {
+				log.Printf("发送上线告警失败: %v", err)
+			}
 		}
 	}
 
