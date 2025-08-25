@@ -82,6 +82,17 @@ wget -O setup-client.sh https://ghproxy.com/https://raw.githubusercontent.com/an
 ```bash
 sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
 ```
+**参数说明**
+- `password`：与服务端配置一致的访问密码（客户端上报校验用）。
+- `server_url`：服务端 HTTP/HTTPS 地址，格式如 `http://domain:port` 或 `https://domain:port`。
+- `name`：节点名称（显示在告警与状态中）。
+- `iface`（可选）：要监控的网卡名，如 `eth0`、`ens18`。留空则自动选择第一个非回环/非虚拟网卡。
+- `interval`（可选）：上报间隔（秒），默认 `60`（脚本里最小 10 秒）。
+
+示例：
+```bash
+sudo ./setup-client.sh abc123 http://api.example.com:8080 CN-GZ-QZY-1G eth0 60
+```
 
 ### 3. 一键更新（升级到最新Release）
 - GitHub 源
