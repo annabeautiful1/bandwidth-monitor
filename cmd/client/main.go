@@ -82,7 +82,23 @@ func loadConfig(path string) (*models.ClientConfig, error) {
 		os.Exit(0)
 	}
 
-	return models.LoadClientConfig(path)
+	// 加载现有配置
+	config, err := models.LoadClientConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 检查并升级配置
+	if models.UpgradeClientConfig(config) {
+		log.Printf("检测到配置文件需要升级，正在自动升级...")
+		if err := saveConfig(path, config); err != nil {
+			log.Printf("保存升级后的配置失败: %v", err)
+		} else {
+			log.Printf("配置文件已升级，确保3时段动态阈值配置完整")
+		}
+	}
+	
+	return config, nil
 }
 
 func saveConfig(path string, config *models.ClientConfig) error {

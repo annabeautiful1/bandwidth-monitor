@@ -153,6 +153,36 @@ else
     done
 fi
 
+# CPU阈值（env: CPU_THRESHOLD，默认 95）
+if [ -n "${CPU_THRESHOLD:-}" ]; then
+    cpu_threshold="$CPU_THRESHOLD"
+else
+    while true; do
+        read -r -p "请设置CPU告警阈值 (百分比，默认: 95): " cpu_threshold </dev/tty || true
+        cpu_threshold=${cpu_threshold:-95}
+        if [[ "$cpu_threshold" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            break
+        else
+            echo -e "${RED}请输入有效的数字${NC}"
+        fi
+    done
+fi
+
+# 内存阈值（env: MEMORY_THRESHOLD，默认 95）
+if [ -n "${MEMORY_THRESHOLD:-}" ]; then
+    memory_threshold="$MEMORY_THRESHOLD"
+else
+    while true; do
+        read -r -p "请设置内存告警阈值 (百分比，默认: 95): " memory_threshold </dev/tty || true
+        memory_threshold=${memory_threshold:-95}
+        if [[ "$memory_threshold" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            break
+        else
+            echo -e "${RED}请输入有效的数字${NC}"
+        fi
+    done
+fi
+
 # 离线阈值（env: OFFLINE_SECONDS，默认 300）
 if [ -n "${OFFLINE_SECONDS:-}" ]; then
     offline_threshold="$OFFLINE_SECONDS"
@@ -181,7 +211,9 @@ cat > "$CONFIG_FILE" << EOF
   },
   "thresholds": {
     "bandwidth_mbps": $bandwidth_threshold,
-    "offline_seconds": $offline_threshold
+    "offline_seconds": $offline_threshold,
+    "cpu_percent": $cpu_threshold,
+    "memory_percent": $memory_threshold
   }
 }
 EOF

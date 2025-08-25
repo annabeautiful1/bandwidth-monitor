@@ -23,8 +23,10 @@ type TGConfig struct {
 
 // Threshold 监控阈值配置
 type Threshold struct {
-	BandwidthMbps  float64 `json:"bandwidth_mbps"`
-	OfflineSeconds int     `json:"offline_seconds"`
+	BandwidthMbps    float64 `json:"bandwidth_mbps"`
+	OfflineSeconds   int     `json:"offline_seconds"`
+	CPUPercent       float64 `json:"cpu_percent"`        // CPU占用告警阈值
+	MemoryPercent    float64 `json:"memory_percent"`     // 内存占用告警阈值
 }
 
 // TimeWindowThreshold 按时间窗口动态阈值
@@ -76,6 +78,8 @@ type NodeStatus struct {
 	Metrics           SystemMetrics `json:"metrics"`
 	IsOnline          bool          `json:"is_online"`
 	BandwidthAlerted  bool          `json:"bandwidth_alerted"`
+	CPUAlerted        bool          `json:"cpu_alerted"`        // CPU告警状态
+	MemoryAlerted     bool          `json:"memory_alerted"`     // 内存告警状态
 	ReportSamples     int           `json:"report_samples"`
 	LastThresholdMbps float64       `json:"last_threshold_mbps"`
 }
@@ -135,4 +139,57 @@ func SaveClientConfig(path string, config *ClientConfig) error {
 	}
 
 	return os.WriteFile(path, data, 0644)
+}
+
+// UpgradeServerConfig 升级服务端配置，添加缺失的默认值
+func UpgradeServerConfig(config *ServerConfig) bool {
+	upgraded := false
+	
+	// 添加CPU阈值默认值
+	if config.Thresholds.CPUPercent <= 0 {
+		config.Thresholds.CPUPercent = 95.0
+		upgraded = true
+	}
+	
+	// 添加内存阈值默认值
+	if config.Thresholds.MemoryPercent <= 0 {
+		config.Thresholds.MemoryPercent = 95.0
+		upgraded = true
+	}
+	
+	return upgraded
+}
+
+// UpgradeClientConfig 升级客户端配置，添加缺失的默认值
+func UpgradeClientConfig(config *ClientConfig) bool {
+	upgraded := false
+	
+	// 检查动态阈值配置是否为空或不完整
+	if len(config.Threshold.Dynamic) == 0 {
+		// 设置默认的3时段配置
+		config.Threshold.Dynamic = []TimeWindowThreshold{
+			{Start: "22:00", End: "02:00", BandwidthMbps: 200}, // 高峰期
+			{Start: "02:00", End: "09:00", BandwidthMbps: 50},  // 低谷期
+			{Start: "09:00", End: "22:00", BandwidthMbps: 100}, // 平峰期
+		}
+		upgraded = true
+	} else if len(config.Threshold.Dynamic) == 2 {
+		// 从旧的2时段升级到3时段
+		oldDynamic := config.Threshold.Dynamic
+		config.Threshold.Dynamic = []TimeWindowThreshold{
+			{Start: "22:00", End: "02:00", BandwidthMbps: 200}, // 高峰期
+			{Start: "02:00", End: "09:00", BandwidthMbps: 50},  // 低谷期  
+			{Start: "09:00", End: "22:00", BandwidthMbps: 100}, // 平峰期
+		}
+		// 尝试保留用户原有配置的阈值
+		if len(oldDynamic) >= 1 {
+			config.Threshold.Dynamic[0].BandwidthMbps = oldDynamic[0].BandwidthMbps
+		}
+		if len(oldDynamic) >= 2 {
+			config.Threshold.Dynamic[1].BandwidthMbps = oldDynamic[1].BandwidthMbps
+		}
+		upgraded = true
+	}
+	
+	return upgraded
 }

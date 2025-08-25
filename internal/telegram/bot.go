@@ -46,13 +46,15 @@ func (b *Bot) SendBandwidthAlert(hostname string, currentMbps, thresholdMbps flo
 	return b.SendMessage(text)
 }
 
-func (b *Bot) SendBandwidthRecovery(hostname string, currentMbps float64) error {
+func (b *Bot) SendBandwidthRecover(hostname string, currentMbps, thresholdMbps float64) error {
 	text := fmt.Sprintf("🟢 *带宽已恢复*\n\n"+
 		"节点: `%s`\n"+
 		"当前带宽: `%.2f Mbps`\n"+
+		"告警阈值: `%.2f Mbps`\n"+
 		"时间: `%s`",
 		hostname,
 		currentMbps,
+		thresholdMbps,
 		time.Now().Format("2006-01-02 15:04:05"))
 	return b.SendMessage(text)
 }
@@ -81,5 +83,61 @@ func (b *Bot) SendOnlineAlert(hostname string) error {
 
 func (b *Bot) SendTestMessage() error {
 	text := "🤖 *带宽监控系统*\n\n测试消息发送成功！"
+	return b.SendMessage(text)
+}
+
+// CPU告警相关方法
+func (b *Bot) SendCPUAlert(hostname string, currentPercent, thresholdPercent float64) error {
+	text := fmt.Sprintf("🔥 *CPU告警*\n\n"+
+		"节点: `%s`\n"+
+		"当前CPU: `%.2f%%`\n"+
+		"告警阈值: `%.2f%%`\n"+
+		"时间: `%s`",
+		hostname,
+		currentPercent,
+		thresholdPercent,
+		time.Now().Format("2006-01-02 15:04:05"))
+
+	return b.SendMessage(text)
+}
+
+func (b *Bot) SendCPURecover(hostname string, currentPercent, thresholdPercent float64) error {
+	text := fmt.Sprintf("✅ *CPU已恢复*\n\n"+
+		"节点: `%s`\n"+
+		"当前CPU: `%.2f%%`\n"+
+		"告警阈值: `%.2f%%`\n"+
+		"时间: `%s`",
+		hostname,
+		currentPercent,
+		thresholdPercent,
+		time.Now().Format("2006-01-02 15:04:05"))
+	return b.SendMessage(text)
+}
+
+// 内存告警相关方法
+func (b *Bot) SendMemoryAlert(hostname string, currentPercent, thresholdPercent float64) error {
+	text := fmt.Sprintf("💾 *内存告警*\n\n"+
+		"节点: `%s`\n"+
+		"当前内存: `%.2f%%`\n"+
+		"告警阈值: `%.2f%%`\n"+
+		"时间: `%s`",
+		hostname,
+		currentPercent,
+		thresholdPercent,
+		time.Now().Format("2006-01-02 15:04:05"))
+
+	return b.SendMessage(text)
+}
+
+func (b *Bot) SendMemoryRecover(hostname string, currentPercent, thresholdPercent float64) error {
+	text := fmt.Sprintf("🟢 *内存已恢复*\n\n"+
+		"节点: `%s`\n"+
+		"当前内存: `%.2f%%`\n"+
+		"告警阈值: `%.2f%%`\n"+
+		"时间: `%s`",
+		hostname,
+		currentPercent,
+		thresholdPercent,
+		time.Now().Format("2006-01-02 15:04:05"))
 	return b.SendMessage(text)
 }

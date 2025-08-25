@@ -118,6 +118,8 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics,
 			Hostname:          hostname,
 			IsOnline:          true,
 			BandwidthAlerted:  false,
+			CPUAlerted:        false,
+			MemoryAlerted:     false,
 			ReportSamples:     0,
 			LastThresholdMbps: thresholdMbps,
 		}
@@ -148,6 +150,8 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics,
 	// 检查带宽告警（跳过首个样本防止冷启动误报）
 	if node.ReportSamples >= 2 {
 		s.checkBandwidthAlert(node)
+		s.checkCPUAlert(node)
+		s.checkMemoryAlert(node)
 	}
 }
 
@@ -188,7 +192,7 @@ func (s *Server) checkBandwidthAlert(node *models.NodeStatus) {
 		if node.BandwidthAlerted {
 			node.BandwidthAlerted = false
 			if s.tgBot != nil {
-				if err := s.tgBot.SendBandwidthRecovery(node.Hostname, currentMbps); err != nil {
+				if err := s.tgBot.SendBandwidthRecover(node.Hostname, currentMbps, threshold); err != nil {
 					log.Printf("发送恢复通知失败: %v", err)
 				}
 			}
@@ -218,6 +222,8 @@ func (s *Server) checkOfflineNodes() {
 			// 节点离线
 			node.IsOnline = false
 			node.BandwidthAlerted = false // 重置带宽告警状态
+			node.CPUAlerted = false       // 重置CPU告警状态
+			node.MemoryAlerted = false    // 重置内存告警状态
 
 			if s.tgBot != nil {
 				if err := s.tgBot.SendOfflineAlert(hostname, now.Sub(node.LastSeen)); err != nil {
@@ -226,6 +232,95 @@ func (s *Server) checkOfflineNodes() {
 			}
 
 			log.Printf("节点 %s 离线，最后上报时间: %s", hostname, node.LastSeen.Format("2006-01-02 15:04:05"))
+		}
+	}
+}
+
+// checkCPUAlert 检查CPU告警
+func (s *Server) checkCPUAlert(node *models.NodeStatus) {
+	cpuThreshold := s.config.Thresholds.CPUPercent
+	if cpuThreshold <= 0 {
+		return // 未配置CPU阈值
+	}
+
+	currentCPU := node.Metrics.CPUPercent
+
+	if currentCPU > cpuThreshold {
+		if !node.CPUAlerted {
+			// 第一次触发CPU告警
+			node.CPUAlerted = true
+			if s.tgBot != nil {
+				if err := s.tgBot.SendCPUAlert(
+					node.Hostname,
+					currentCPU,
+					cpuThreshold,
+				); err != nil {
+					log.Printf("发送CPU告警失败: %v", err)
+				}
+			}
+			log.Printf("节点 %s CPU告警: %.2f%% > %.2f%%",
+				node.Hostname, currentCPU, cpuThreshold)
+		}
+	} else {
+		if node.CPUAlerted {
+			// CPU使用率恢复正常
+			node.CPUAlerted = false
+			if s.tgBot != nil {
+				if err := s.tgBot.SendCPURecover(
+					node.Hostname,
+					currentCPU,
+					cpuThreshold,
+				); err != nil {
+					log.Printf("发送CPU恢复通知失败: %v", err)
+				}
+			}
+			log.Printf("节点 %s CPU已恢复: %.2f%% <= %.2f%%",
+				node.Hostname, currentCPU, cpuThreshold)
+		}
+	}
+}
+
+// checkMemoryAlert 检查内存告警
+func (s *Server) checkMemoryAlert(node *models.NodeStatus) {
+	memoryThreshold := s.config.Thresholds.MemoryPercent
+	if memoryThreshold <= 0 {
+		return // 未配置内存阈值
+	}
+
+	// 计算内存使用百分比
+	currentMemory := float64(node.Metrics.MemoryUsed) / float64(node.Metrics.MemoryTotal) * 100
+
+	if currentMemory > memoryThreshold {
+		if !node.MemoryAlerted {
+			// 第一次触发内存告警
+			node.MemoryAlerted = true
+			if s.tgBot != nil {
+				if err := s.tgBot.SendMemoryAlert(
+					node.Hostname,
+					currentMemory,
+					memoryThreshold,
+				); err != nil {
+					log.Printf("发送内存告警失败: %v", err)
+				}
+			}
+			log.Printf("节点 %s 内存告警: %.2f%% > %.2f%%",
+				node.Hostname, currentMemory, memoryThreshold)
+		}
+	} else {
+		if node.MemoryAlerted {
+			// 内存使用率恢复正常
+			node.MemoryAlerted = false
+			if s.tgBot != nil {
+				if err := s.tgBot.SendMemoryRecover(
+					node.Hostname,
+					currentMemory,
+					memoryThreshold,
+				); err != nil {
+					log.Printf("发送内存恢复通知失败: %v", err)
+				}
+			}
+			log.Printf("节点 %s 内存已恢复: %.2f%% <= %.2f%%",
+				node.Hostname, currentMemory, memoryThreshold)
 		}
 	}
 }
