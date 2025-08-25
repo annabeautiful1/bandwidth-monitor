@@ -67,10 +67,10 @@ func loadConfig(path string) (*models.ServerConfig, error) {
 				ChatID:   0,
 			},
 			Thresholds: models.Threshold{
-				BandwidthMbps:  10.0,
-				OfflineSeconds: 300,
-				CPUPercent:     95.0,  // 默认CPU告警阈值95%
-				MemoryPercent:  95.0,  // 默认内存告警阈值95%
+				BandwidthMbps:  100.0, // 默认带宽阈值
+				OfflineSeconds: 300,   // 默认离线阈值
+				CPUPercent:     95.0,  // 默认CPU告警阈值
+				MemoryPercent:  95.0,  // 默认内存告警阈值
 			},
 		}
 
@@ -83,20 +83,10 @@ func loadConfig(path string) (*models.ServerConfig, error) {
 		os.Exit(0)
 	}
 
-	// 加载现有配置
+	// 加载配置（自动应用默认值）
 	config, err := models.LoadServerConfig(path)
 	if err != nil {
 		return nil, err
-	}
-	
-	// 检查并升级配置
-	if models.UpgradeServerConfig(config) {
-		log.Printf("检测到配置文件缺少默认值，正在自动升级...")
-		if err := saveConfig(path, config); err != nil {
-			log.Printf("保存升级后的配置失败: %v", err)
-		} else {
-			log.Printf("配置文件已升级，添加了CPU和内存告警阈值")
-		}
 	}
 	
 	return config, nil

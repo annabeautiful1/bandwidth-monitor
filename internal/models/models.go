@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"time"
 )
@@ -91,7 +92,7 @@ type APIResponse struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// LoadServerConfig 加载服务端配置
+// LoadServerConfig 加载服务端配置并应用默认值
 func LoadServerConfig(path string) (*ServerConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -101,6 +102,15 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	var config ServerConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, err
+	}
+
+	// 自动应用默认值并保存配置文件
+	if applyServerDefaults(&config) {
+		if err := SaveServerConfig(path, &config); err != nil {
+			log.Printf("保存配置默认值失败: %v", err)
+		} else {
+			log.Printf("配置文件已更新默认值: %s", path)
+		}
 	}
 
 	return &config, nil
@@ -116,7 +126,7 @@ func SaveServerConfig(path string, config *ServerConfig) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// LoadClientConfig 加载客户端配置
+// LoadClientConfig 加载客户端配置并应用默认值
 func LoadClientConfig(path string) (*ClientConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -126,6 +136,15 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 	var config ClientConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, err
+	}
+
+	// 自动应用默认值并保存配置文件
+	if applyClientDefaults(&config) {
+		if err := SaveClientConfig(path, &config); err != nil {
+			log.Printf("保存配置默认值失败: %v", err)
+		} else {
+			log.Printf("配置文件已更新默认值: %s", path)
+		}
 	}
 
 	return &config, nil
@@ -141,55 +160,93 @@ func SaveClientConfig(path string, config *ClientConfig) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// UpgradeServerConfig 升级服务端配置，添加缺失的默认值
-func UpgradeServerConfig(config *ServerConfig) bool {
-	upgraded := false
+// applyServerDefaults 为服务端配置应用默认值
+func applyServerDefaults(config *ServerConfig) bool {
+	applied := false
 	
-	// 添加CPU阈值默认值
+	// 应用CPU阈值默认值
 	if config.Thresholds.CPUPercent <= 0 {
 		config.Thresholds.CPUPercent = 95.0
-		upgraded = true
+		applied = true
 	}
 	
-	// 添加内存阈值默认值
+	// 应用内存阈值默认值
 	if config.Thresholds.MemoryPercent <= 0 {
 		config.Thresholds.MemoryPercent = 95.0
-		upgraded = true
+		applied = true
 	}
 	
-	return upgraded
+	// 应用带宽阈值默认值
+	if config.Thresholds.BandwidthMbps <= 0 {
+		config.Thresholds.BandwidthMbps = 100.0
+		applied = true
+	}
+	
+	// 应用离线阈值默认值
+	if config.Thresholds.OfflineSeconds <= 0 {
+		config.Thresholds.OfflineSeconds = 300
+		applied = true
+	}
+	
+	// 应用监听地址默认值
+	if config.Listen == "" {
+		config.Listen = ":8080"
+		applied = true
+	}
+	
+	// 应用域名默认值
+	if config.Domain == "" {
+		config.Domain = "localhost"
+		applied = true
+	}
+	
+	return applied
 }
 
-// UpgradeClientConfig 升级客户端配置，添加缺失的默认值
-func UpgradeClientConfig(config *ClientConfig) bool {
-	upgraded := false
+// applyClientDefaults 为客户端配置应用默认值
+func applyClientDefaults(config *ClientConfig) bool {
+	applied := false
 	
-	// 检查动态阈值配置是否为空或不完整
+	// 应用上报间隔默认值
+	if config.ReportIntervalSeconds <= 0 {
+		config.ReportIntervalSeconds = 60
+		applied = true
+	}
+	
+	// 应用主机名默认值
+	if config.Hostname == "" {
+		if hostname, err := os.Hostname(); err == nil {
+			config.Hostname = hostname
+		} else {
+			config.Hostname = "unknown"
+		}
+		applied = true
+	}
+	
+	// 应用动态阈值默认配置
 	if len(config.Threshold.Dynamic) == 0 {
-		// 设置默认的3时段配置
 		config.Threshold.Dynamic = []TimeWindowThreshold{
 			{Start: "22:00", End: "02:00", BandwidthMbps: 200}, // 高峰期
 			{Start: "02:00", End: "09:00", BandwidthMbps: 50},  // 低谷期
 			{Start: "09:00", End: "22:00", BandwidthMbps: 100}, // 平峰期
 		}
-		upgraded = true
+		applied = true
 	} else if len(config.Threshold.Dynamic) == 2 {
 		// 从旧的2时段升级到3时段
 		oldDynamic := config.Threshold.Dynamic
 		config.Threshold.Dynamic = []TimeWindowThreshold{
-			{Start: "22:00", End: "02:00", BandwidthMbps: 200}, // 高峰期
-			{Start: "02:00", End: "09:00", BandwidthMbps: 50},  // 低谷期  
-			{Start: "09:00", End: "22:00", BandwidthMbps: 100}, // 平峰期
+			{Start: "22:00", End: "02:00", BandwidthMbps: oldDynamic[0].BandwidthMbps}, // 高峰期
+			{Start: "02:00", End: "09:00", BandwidthMbps: oldDynamic[1].BandwidthMbps}, // 低谷期
+			{Start: "09:00", End: "22:00", BandwidthMbps: 100},                        // 新增平峰期
 		}
-		// 尝试保留用户原有配置的阈值
-		if len(oldDynamic) >= 1 {
-			config.Threshold.Dynamic[0].BandwidthMbps = oldDynamic[0].BandwidthMbps
-		}
-		if len(oldDynamic) >= 2 {
-			config.Threshold.Dynamic[1].BandwidthMbps = oldDynamic[1].BandwidthMbps
-		}
-		upgraded = true
+		applied = true
 	}
 	
-	return upgraded
+	// 确保静态阈值有默认值（0表示禁用）
+	if config.Threshold.StaticBandwidthMbps < 0 {
+		config.Threshold.StaticBandwidthMbps = 0
+		applied = true
+	}
+	
+	return applied
 }

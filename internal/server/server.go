@@ -157,10 +157,12 @@ func (s *Server) updateNodeStatus(hostname string, metrics models.SystemMetrics,
 
 func (s *Server) checkBandwidthAlert(node *models.NodeStatus) {
 	// 计算当前带宽 (Mbps)
-	inMbps := float64(node.Metrics.NetworkInBps) / 125000.0 // 1 Mbps = 125000 bytes/s
+	inMbps := float64(node.Metrics.NetworkInBps) / 125000.0  // 1 Mbps = 125000 bytes/s
 	outMbps := float64(node.Metrics.NetworkOutBps) / 125000.0
+	
+	// 取上下行的最小值进行异常检测（瓶颈检测）
 	currentMbps := inMbps
-	if outMbps > inMbps {
+	if outMbps < inMbps {
 		currentMbps = outMbps
 	}
 
