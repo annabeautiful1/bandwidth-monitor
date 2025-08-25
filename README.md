@@ -55,15 +55,17 @@ curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/b
 ```
 - GitHub 源（一键非交互）
 ```bash
-wget -O setup-client.sh https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh \
-  && chmod +x setup-client.sh \
-  && sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
+wget -O setup-client.sh https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh && chmod +x setup-client.sh
+```
+```bash
+sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
 ```
 - 中国大陆镜像（一键非交互）
 ```bash
-wget -O setup-client.sh https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh \
-  && chmod +x setup-client.sh \
-  && sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
+wget -O setup-client.sh https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh && chmod +x setup-client.sh
+```
+```bash
+sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
 ```
 
 ### 3. 一键更新（升级到最新Release）
@@ -71,6 +73,8 @@ wget -O setup-client.sh https://ghproxy.com/https://raw.githubusercontent.com/an
 ```bash
 # 服务端
 bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-server.sh)
+```
+```bash
 # 客户端
 bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
 ```
@@ -78,6 +82,8 @@ bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-moni
 ```bash
 # 服务端
 bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-server.sh)
+```
+```bash
 # 客户端
 bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
 ```
