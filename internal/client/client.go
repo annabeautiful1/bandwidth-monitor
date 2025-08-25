@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,18 +20,21 @@ import (
 )
 
 type Client struct {
-	config       *models.ClientConfig
-	httpClient   *http.Client
-	stopChan     chan struct{}
-	wg           sync.WaitGroup
-	lastNetStats map[string]net.IOCountersStat
-	lastSampleAt time.Time
-	chosenIfName string
+	config        *models.ClientConfig
+	configPath    string
+	configMutex   sync.RWMutex
+	httpClient    *http.Client
+	stopChan      chan struct{}
+	wg            sync.WaitGroup
+	lastNetStats  map[string]net.IOCountersStat
+	lastSampleAt  time.Time
+	configModTime time.Time
 }
 
-func NewClient(config *models.ClientConfig) *Client {
+func NewClient(config *models.ClientConfig, configPath string) *Client {
 	return &Client{
-		config: config,
+		config:     config,
+		configPath: configPath,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -40,11 +44,19 @@ func NewClient(config *models.ClientConfig) *Client {
 }
 
 func (c *Client) Start() error {
-	// 选择监控网卡
-	c.chosenIfName = c.selectInterfaceName()
-	log.Printf("使用网卡: %s", c.chosenIfName)
+	// 初始化配置文件修改时间
+	c.updateConfigModTime()
 
-	ticker := time.NewTicker(time.Duration(c.config.ReportIntervalSeconds) * time.Second)
+	// 启动配置监控 goroutine
+	c.wg.Add(1)
+	go c.configWatcher()
+
+	// 选择监控网卡
+	interfaceInfo := c.getInterfaceInfo()
+	log.Printf("网卡配置: %s", interfaceInfo)
+
+	currentInterval := c.getReportInterval()
+	ticker := time.NewTicker(time.Duration(currentInterval) * time.Second)
 	defer ticker.Stop()
 
 	// 立即发送一次报告
@@ -55,6 +67,15 @@ func (c *Client) Start() error {
 	for {
 		select {
 		case <-ticker.C:
+			// 检查配置是否更新了上报间隔
+			newInterval := c.getReportInterval()
+			if newInterval != currentInterval {
+				log.Printf("上报间隔已更新: %d秒 -> %d秒", currentInterval, newInterval)
+				currentInterval = newInterval
+				ticker.Stop()
+				ticker = time.NewTicker(time.Duration(newInterval) * time.Second)
+			}
+
 			if err := c.reportMetrics(); err != nil {
 				log.Printf("上报失败: %v", err)
 			}
@@ -62,6 +83,103 @@ func (c *Client) Start() error {
 			return nil
 		}
 	}
+}
+
+// configWatcher 配置文件监控器
+func (c *Client) configWatcher() {
+	defer c.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Second) // 每5秒检查一次配置文件
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if c.checkConfigUpdate() {
+				if err := c.reloadConfig(); err != nil {
+					log.Printf("重载配置失败: %v", err)
+				} else {
+					log.Printf("配置文件已重载")
+				}
+			}
+		case <-c.stopChan:
+			return
+		}
+	}
+}
+
+// checkConfigUpdate 检查配置文件是否有更新
+func (c *Client) checkConfigUpdate() bool {
+	info, err := os.Stat(c.configPath)
+	if err != nil {
+		return false
+	}
+
+	return info.ModTime().After(c.configModTime)
+}
+
+// updateConfigModTime 更新配置文件修改时间
+func (c *Client) updateConfigModTime() {
+	info, err := os.Stat(c.configPath)
+	if err != nil {
+		return
+	}
+	c.configModTime = info.ModTime()
+}
+
+// reloadConfig 重载配置文件
+func (c *Client) reloadConfig() error {
+	newConfig, err := models.LoadClientConfig(c.configPath)
+	if err != nil {
+		return fmt.Errorf("加载配置文件失败: %v", err)
+	}
+
+	c.configMutex.Lock()
+	oldHostname := c.config.Hostname
+	oldServerURL := c.config.ServerURL
+	oldInterfaceName := c.config.InterfaceName
+
+	c.config = newConfig
+	c.configMutex.Unlock()
+
+	c.updateConfigModTime()
+
+	// 记录重要配置变化
+	if newConfig.Hostname != oldHostname {
+		log.Printf("主机名已更新: %s -> %s", oldHostname, newConfig.Hostname)
+	}
+	if newConfig.ServerURL != oldServerURL {
+		log.Printf("服务器地址已更新: %s -> %s", oldServerURL, newConfig.ServerURL)
+	}
+	if newConfig.InterfaceName != oldInterfaceName {
+		log.Printf("网卡设置已更新: %s -> %s", oldInterfaceName, newConfig.InterfaceName)
+		// 网卡变更时重置统计缓存
+		c.lastNetStats = make(map[string]net.IOCountersStat)
+		// 更新网卡信息显示
+		interfaceInfo := c.getInterfaceInfo()
+		log.Printf("网卡配置: %s", interfaceInfo)
+	}
+
+	return nil
+}
+
+// 安全的配置访问方法
+func (c *Client) getReportInterval() int {
+	c.configMutex.RLock()
+	defer c.configMutex.RUnlock()
+	return c.config.ReportIntervalSeconds
+}
+
+func (c *Client) getInterfaceName() string {
+	c.configMutex.RLock()
+	defer c.configMutex.RUnlock()
+	return c.config.InterfaceName
+}
+
+func (c *Client) getThresholdConfig() models.ClientThresholdConfig {
+	c.configMutex.RLock()
+	defer c.configMutex.RUnlock()
+	return c.config.Threshold
 }
 
 func (c *Client) Stop() {
@@ -77,15 +195,21 @@ func (c *Client) reportMetrics() error {
 
 	effectiveThreshold := c.getEffectiveThresholdMbps(time.Now())
 
+	c.configMutex.RLock()
+	password := c.config.Password
+	hostname := c.config.Hostname
+	serverURL := c.config.ServerURL
+	c.configMutex.RUnlock()
+
 	request := models.ReportRequest{
-		Password:               c.config.Password,
-		Hostname:               c.config.Hostname,
+		Password:               password,
+		Hostname:               hostname,
 		Timestamp:              time.Now().Unix(),
 		Metrics:                *metrics,
 		EffectiveThresholdMbps: effectiveThreshold,
 	}
 
-	return c.sendReport(request)
+	return c.sendReport(request, serverURL)
 }
 
 func (c *Client) collectMetrics() (*models.SystemMetrics, error) {
@@ -133,32 +257,58 @@ func (c *Client) getNetworkSpeed() (uint64, uint64, error) {
 		return 0, 0, err
 	}
 
-	// 根据配置或自动选择到具体网卡
-	ifaceName := c.chosenIfName
 	var currentStats net.IOCountersStat
-	found := false
-	for _, s := range stats {
-		if s.Name == ifaceName {
-			currentStats = s
-			found = true
-			break
-		}
-	}
-	if !found {
+	var currentInBytes, currentOutBytes uint64
+	var interfacesUsed []string
+
+	interfaceName := c.getInterfaceName()
+
+	// 如果指定了网卡名称，使用指定网卡
+	if interfaceName != "" {
+		found := false
 		for _, s := range stats {
-			if s.Name != "lo" && !isVirtualName(s.Name) {
+			if s.Name == interfaceName {
 				currentStats = s
-				ifaceName = s.Name
+				currentInBytes = s.BytesRecv
+				currentOutBytes = s.BytesSent
+				interfacesUsed = []string{s.Name}
+				found = true
 				break
 			}
 		}
+		if !found {
+			return 0, 0, fmt.Errorf("指定的网卡 %s 未找到", interfaceName)
+		}
+	} else {
+		// 默认情况：统计所有非回环和非虚拟网卡的总和
+		for _, s := range stats {
+			if s.Name != "lo" && !isVirtualName(s.Name) {
+				currentInBytes += s.BytesRecv
+				currentOutBytes += s.BytesSent
+				interfacesUsed = append(interfacesUsed, s.Name)
+			}
+		}
+
+		if len(interfacesUsed) == 0 {
+			return 0, 0, fmt.Errorf("未找到可用的物理网卡")
+		}
+
+		// 为总和创建虚拟统计结构
+		currentStats = net.IOCountersStat{
+			Name:      "total", // 使用特殊标识符
+			BytesRecv: currentInBytes,
+			BytesSent: currentOutBytes,
+		}
 	}
 
+	// 生成统计键名
+	statsKey := c.getStatsKey(interfacesUsed, interfaceName)
+
 	// 如果是第一次采集，记录并返回0（避免冷启动高估）
-	lastStats, exists := c.lastNetStats[ifaceName]
+	lastStats, exists := c.lastNetStats[statsKey]
 	now := time.Now()
 	if !exists {
-		c.lastNetStats[ifaceName] = currentStats
+		c.lastNetStats[statsKey] = currentStats
 		c.lastSampleAt = now
 		return 0, 0, nil
 	}
@@ -166,7 +316,7 @@ func (c *Client) getNetworkSpeed() (uint64, uint64, error) {
 	// 用真实间隔计算速度
 	elapsed := now.Sub(c.lastSampleAt).Seconds()
 	if elapsed <= 0 {
-		elapsed = float64(c.config.ReportIntervalSeconds)
+		elapsed = float64(c.getReportInterval())
 	}
 
 	bytesInDiff := currentStats.BytesRecv - lastStats.BytesRecv
@@ -175,19 +325,31 @@ func (c *Client) getNetworkSpeed() (uint64, uint64, error) {
 	inBps := uint64(float64(bytesInDiff) / elapsed)
 	outBps := uint64(float64(bytesOutDiff) / elapsed)
 
-	c.lastNetStats[ifaceName] = currentStats
+	c.lastNetStats[statsKey] = currentStats
 	c.lastSampleAt = now
 
 	return inBps, outBps, nil
 }
 
-func (c *Client) sendReport(request models.ReportRequest) error {
+// getStatsKey 生成统计键名
+func (c *Client) getStatsKey(interfaces []string, interfaceName string) string {
+	if interfaceName != "" {
+		return interfaceName
+	}
+	// 对于总和统计，使用所有网卡名称组合
+	if len(interfaces) == 0 {
+		return "total"
+	}
+	return fmt.Sprintf("total_%s", strings.Join(interfaces, "_"))
+}
+
+func (c *Client) sendReport(request models.ReportRequest, serverURL string) error {
 	jsonData, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("JSON编码失败: %v", err)
 	}
 
-	url := fmt.Sprintf("%s/api/report", c.config.ServerURL)
+	url := fmt.Sprintf("%s/api/report", serverURL)
 	resp, err := c.httpClient.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("HTTP请求失败: %v", err)
@@ -228,20 +390,31 @@ func formatBytes(bytes uint64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// 选择网卡：优先使用配置，否则选择第一个非回环/非虚拟网卡
-func (c *Client) selectInterfaceName() string {
-	if c.config.InterfaceName != "" {
-		return c.config.InterfaceName
+// getInterfaceInfo 获取网卡配置信息用于日志显示
+func (c *Client) getInterfaceInfo() string {
+	interfaceName := c.getInterfaceName()
+	if interfaceName != "" {
+		return fmt.Sprintf("指定网卡 %s", interfaceName)
 	}
-	ifaces, _ := net.Interfaces()
-	for _, iface := range ifaces {
-		name := iface.Name
-		if name == "lo" || isVirtualName(name) {
-			continue
+
+	// 获取所有可用的物理网卡
+	stats, err := net.IOCounters(true)
+	if err != nil {
+		return "网卡信息获取失败"
+	}
+
+	var physicalIfaces []string
+	for _, s := range stats {
+		if s.Name != "lo" && !isVirtualName(s.Name) {
+			physicalIfaces = append(physicalIfaces, s.Name)
 		}
-		return name
 	}
-	return "lo"
+
+	if len(physicalIfaces) == 0 {
+		return "未找到可用的物理网卡"
+	}
+
+	return fmt.Sprintf("自动统计所有物理网卡总和: %s", strings.Join(physicalIfaces, ", "))
 }
 
 func isVirtualName(name string) bool {
@@ -257,8 +430,10 @@ func isVirtualName(name string) bool {
 
 // getEffectiveThresholdMbps 计算当前时间的有效阈值（动态优先，fallback到静态）
 func (c *Client) getEffectiveThresholdMbps(now time.Time) float64 {
+	thresholdConfig := c.getThresholdConfig()
+
 	// 动态阈值
-	for _, w := range c.config.Threshold.Dynamic {
+	for _, w := range thresholdConfig.Dynamic {
 		if inWindow(now, w.Start, w.End) {
 			if w.BandwidthMbps > 0 {
 				return w.BandwidthMbps
@@ -266,8 +441,8 @@ func (c *Client) getEffectiveThresholdMbps(now time.Time) float64 {
 		}
 	}
 	// 静态阈值
-	if c.config.Threshold.StaticBandwidthMbps > 0 {
-		return c.config.Threshold.StaticBandwidthMbps
+	if thresholdConfig.StaticBandwidthMbps > 0 {
+		return thresholdConfig.StaticBandwidthMbps
 	}
 	return 0
 }

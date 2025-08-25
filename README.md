@@ -5,15 +5,16 @@
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
 ```
-- 中国大陆镜像（ghproxy）
+- 中国大陆镜像（ghfast）
 ```bash
-bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
+bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
 ```
 > 脚本提供：
-> - 服务端：安装/更新主控、查看服务端日志
-> - 客户端：安装/更新被控、查看客户端日志
-> - 配置修改（客户端）：高峰/低谷阈值、峰谷时间段、名称、对接地址、上报间隔、启用/关闭静态阈值
+> - 服务端：安装/更新主控、重启服务端、查看服务端日志
+> - 客户端：安装/更新被控、重启客户端、查看客户端日志  
+> - 配置修改：高峰/低谷/平峰三时段阈值、时间段、名称、对接地址、上报间隔、启用/关闭静态阈值
 > - 系统时间：一键设置为北京时间
+> - 简化命令：可安装 bm、status bm、log bm、restart bm 等快捷命令
 
 一个轻量级的分布式带宽监控系统，支持实时监控服务器带宽使用情况，并在带宽异常时通过Telegram发送告警通知。
 
@@ -22,7 +23,7 @@ bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeaut
 - ✅ **实时监控**: 监控CPU使用率、内存使用、网络带宽等系统指标
 - ✅ **智能告警**: 带宽低于阈值时自动发送Telegram通知，恢复后自动发送“带宽已恢复”
 - ✅ **按节点自定义阈值**: 阈值由客户端配置与上报，每台机器可不同
-- ✅ **动态阈值**: 支持按时间段设置不同带宽阈值（默认 10:00–02:00 为 200Mbps，02:00–10:00 为 50Mbps）
+- ✅ **动态阈值**: 支持按时间段设置不同带宽阈值（默认 22:00–02:00 为高峰期 200Mbps，02:00–09:00 为低谷期 50Mbps，09:00–22:00 为平峰期 100Mbps）
 - ✅ **首次上线通知**: 节点首次被发现或离线后重新上线都会推送
 - ✅ **轻量设计**: 极低的资源占用，适合各种规模的服务器
 - ✅ **简单部署**: 一键安装脚本，5分钟完成部署
@@ -54,9 +55,9 @@ bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeaut
 ```bash
 curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
 ```
-- 中国大陆镜像（ghproxy）
+- 中国大陆镜像（ghfast）
 ```bash
-curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
+curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
 ```
 
 ### 2. 客户端安装 (被监控服务器)
@@ -66,7 +67,7 @@ curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/mai
 ```
 - 中国大陆镜像（交互式）
 ```bash
-curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
+curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
 ```
 - GitHub 源（一键非交互）
 ```bash
@@ -77,7 +78,7 @@ sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
 ```
 - 中国大陆镜像（一键非交互）
 ```bash
-wget -O setup-client.sh https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh && chmod +x setup-client.sh
+wget -O setup-client.sh https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh && chmod +x setup-client.sh
 ```
 ```bash
 sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
@@ -107,24 +108,25 @@ bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-moni
 - 中国大陆镜像
 ```bash
 # 服务端
-bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-server.sh)
+bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-server.sh)
 ```
 ```bash
 # 客户端
-bash <(curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
+bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
 ```
 
-> 提升发布包下载速度：脚本支持通过 `RELEASE_MIRROR` 指定 Release 下载镜像前缀（如 `https://ghproxy.com/`）。示例：
+> 提升发布包下载速度：脚本支持通过 `RELEASE_MIRROR` 指定 Release 下载镜像前缀（如 `https://ghfast.top/`）。可在 https://ghproxy.link/ 获取最新可用镜像地址。示例：
 ```bash
-RELEASE_MIRROR=https://ghproxy.com/ \
+RELEASE_MIRROR=https://ghfast.top/ \
 bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
 ```
 
 ## ⚙️ 阈值配置（客户端侧）
 - 阈值由客户端计算后随上报一并发送到服务端，服务端据此判断告警/恢复。
 - 默认动态阈值：
-  - 10:00–02:00: 200 Mbps
-  - 02:00–10:00: 50 Mbps
+  - 22:00–02:00: 200 Mbps（高峰期）
+  - 02:00–09:00: 50 Mbps（低谷期）
+  - 09:00–22:00: 100 Mbps（平峰期）
 - 可选静态阈值：将 `static_bandwidth_mbps` 设为非零值可作为兜底（当不在任何动态时间窗内时使用）。
 
 client.json 示例：
@@ -138,8 +140,9 @@ client.json 示例：
   "threshold": {
     "static_bandwidth_mbps": 0,
     "dynamic": [
-      {"start": "10:00", "end": "02:00", "bandwidth_mbps": 200},
-      {"start": "02:00", "end": "10:00", "bandwidth_mbps": 50}
+      {"start": "22:00", "end": "02:00", "bandwidth_mbps": 200},
+      {"start": "02:00", "end": "09:00", "bandwidth_mbps": 50},
+      {"start": "09:00", "end": "22:00", "bandwidth_mbps": 100}
     ]
   }
 }
@@ -153,10 +156,29 @@ client.json 示例：
 
 ## 🔍 故障排查
 - 若安装后速率异常，确认 `interface_name` 已选择正确的物理网卡。
-- 若未收到“上线/离线/恢复”通知，先调用服务端测试接口：
+- 若未收到"上线/离线/恢复"通知，先调用服务端测试接口：
 ```bash
 curl -X POST http://<server>:<port>/api/test-telegram
 ```
+
+## ⚡ 快捷命令（可选）
+
+安装简化命令，让管理更便捷：
+```bash
+# 安装快捷命令
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-shortcuts.sh)
+```
+或使用镜像：
+```bash
+# 中国大陆镜像
+sudo bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-shortcuts.sh)
+```
+
+安装后可用命令：
+- `sudo bm` - 打开控制面板
+- `status bm` - 查看服务状态  
+- `log bm` - 查看日志
+- `sudo restart bm` - 重启服务
 
 ## 📄 许可证
 本项目采用 MIT 许可证，详见 [LICENSE](LICENSE) 文件。

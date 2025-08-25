@@ -1,16 +1,25 @@
 #!/bin/bash
 # Bandwidth Monitor 控制脚本（安装/更新/日志/配置）
-# 支持 GitHub 源与中国大陆加速镜像（ghproxy）
+# 支持 GitHub 源与中国大陆加速镜像（ghfast）
 
 set -e
 
 REPO="annabeautiful1/bandwidth-monitor"
 RAW_BASE_GH="https://raw.githubusercontent.com/${REPO}/main"
-RAW_PROXY=""  # 置为 https://ghproxy.com/ 可走国内镜像
+RAW_PROXY=""  # 置为 https://ghfast.top/ 可走国内镜像
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
 
 require_root() {
   if [[ $EUID -ne 0 ]]; then
-    echo "请使用 sudo 或 root 运行本脚本" >&2
+    echo -e "${RED}请使用 sudo 或 root 运行本脚本${NC}" >&2
     exit 1
   fi
 }
@@ -20,8 +29,30 @@ raw_url() {
   echo "${RAW_PROXY}${RAW_BASE_GH}/${path}"
 }
 
+log_info() {
+  echo -e "${BLUE}[信息]${NC} $1"
+}
+
+log_success() {
+  echo -e "${GREEN}[成功]${NC} $1"
+}
+
+log_warning() {
+  echo -e "${YELLOW}[警告]${NC} $1"
+}
+
+log_error() {
+  echo -e "${RED}[错误]${NC} $1"
+}
+
+show_progress() {
+  local msg="$1"
+  echo -e "${CYAN}[进行中]${NC} $msg..."
+}
+
 ensure_jq() {
   if command -v jq >/dev/null 2>&1; then return; fi
+  show_progress "安装 jq 工具"
   if command -v apt >/dev/null 2>&1; then
     apt update -y >/dev/null 2>&1 || true
     apt install -y jq >/dev/null 2>&1 || true
@@ -30,37 +61,65 @@ ensure_jq() {
     yum install -y jq >/dev/null 2>&1 || true
   fi
   if ! command -v jq >/dev/null 2>&1; then
-    echo "未安装 jq，请手动安装后重试 (apt install -y jq / yum install -y jq)" >&2
+    log_error "未安装 jq，请手动安装后重试 (apt install -y jq / yum install -y jq)"
     exit 1
+  fi
+  log_success "jq 工具安装完成"
+}
+
+# ---------- 服务端（主控） ----------
+server_install_update() {
+  show_progress "安装/更新服务端（主控）"
+  if bash <(curl -sSL "$(raw_url scripts/install-server.sh)") 2>&1; then
+    log_success "服务端（主控）安装/更新完成"
+  else
+    log_error "服务端（主控）安装/更新失败"
+    read -p "按 Enter 键继续..."
   fi
 }
 
-# ---------- 服务端 ----------
-server_install() {
-  bash <(curl -sSL "$(raw_url scripts/install-server.sh)")
-}
-
-server_update() {
-  RELEASE_MIRROR="${RELEASE_MIRROR:-${RAW_PROXY}}" \
-  bash <(curl -sSL "$(raw_url scripts/update-server.sh)")
+server_restart() {
+  show_progress "重启服务端（主控）"
+  if systemctl restart bandwidth-monitor 2>/dev/null; then
+    log_success "服务端（主控）重启完成"
+    systemctl status bandwidth-monitor --no-pager -l
+  else
+    log_error "服务端（主控）重启失败"
+  fi
+  read -p "按 Enter 键继续..."
 }
 
 server_logs() {
-  journalctl -u bandwidth-monitor -n 200 --no-pager
+  echo -e "${PURPLE}================= 服务端（主控）日志 =================${NC}"
+  journalctl -u bandwidth-monitor -n 50 --no-pager -f
 }
 
-# ---------- 客户端 ----------
-client_install() {
-  bash <(curl -sSL "$(raw_url scripts/install-client.sh)")
+# ---------- 客户端（被控） ----------
+client_install_update() {
+  show_progress "安装/更新客户端（被控）"
+  RELEASE_MIRROR="${RELEASE_MIRROR:-${RAW_PROXY}}"
+  if bash <(curl -sSL "$(raw_url scripts/install-client.sh)") 2>&1; then
+    log_success "客户端（被控）安装/更新完成"
+  else
+    log_error "客户端（被控）安装/更新失败"
+    read -p "按 Enter 键继续..."
+  fi
 }
 
-client_update() {
-  RELEASE_MIRROR="${RELEASE_MIRROR:-${RAW_PROXY}}" \
-  bash <(curl -sSL "$(raw_url scripts/update-client.sh)")
+client_restart() {
+  show_progress "重启客户端（被控）"
+  if systemctl restart bandwidth-monitor-client 2>/dev/null; then
+    log_success "客户端（被控）重启完成"
+    systemctl status bandwidth-monitor-client --no-pager -l
+  else
+    log_error "客户端（被控）重启失败"
+  fi
+  read -p "按 Enter 键继续..."
 }
 
 client_logs() {
-  journalctl -u bandwidth-monitor-client -n 200 --no-pager
+  echo -e "${PURPLE}================= 客户端（被控）日志 =================${NC}"
+  journalctl -u bandwidth-monitor-client -n 50 --no-pager -f
 }
 
 CLIENT_CFG="/opt/bandwidth-monitor-client/client.json"
@@ -68,50 +127,77 @@ CLIENT_CFG="/opt/bandwidth-monitor-client/client.json"
 cfg_set() {
   ensure_jq
   local jq_expr="$1"
+  show_progress "更新配置"
   tmp=$(mktemp)
-  jq "$jq_expr" "$CLIENT_CFG" >"$tmp" && mv -f "$tmp" "$CLIENT_CFG"
-  systemctl restart bandwidth-monitor-client || true
-  echo "✓ 已更新并重启客户端"
+  if jq "$jq_expr" "$CLIENT_CFG" >"$tmp" && mv -f "$tmp" "$CLIENT_CFG"; then
+    log_success "配置更新完成"
+    log_info "配置将在5秒内自动重载，无需重启服务"
+  else
+    log_error "配置更新失败"
+  fi
 }
 
-set_peak_threshold() {
-  read -rp "请输入高峰期带宽阈值(Mbps): " val
+set_high_peak_threshold() {
+  echo -e "${CYAN}当前配置的高峰期（22:00-02:00）阈值：${NC}"
+  jq -r '.threshold.dynamic[0].bandwidth_mbps' "$CLIENT_CFG" 2>/dev/null || echo "未找到配置"
+  read -rp "请输入新的高峰期带宽阈值(Mbps): " val
   cfg_set ".threshold.dynamic[0].bandwidth_mbps = ($val|tonumber)"
 }
 
-set_valley_threshold() {
-  read -rp "请输入低谷期带宽阈值(Mbps): " val
+set_low_valley_threshold() {
+  echo -e "${CYAN}当前配置的低谷期（02:00-09:00）阈值：${NC}"
+  jq -r '.threshold.dynamic[1].bandwidth_mbps' "$CLIENT_CFG" 2>/dev/null || echo "未找到配置"
+  read -rp "请输入新的低谷期带宽阈值(Mbps): " val
   cfg_set ".threshold.dynamic[1].bandwidth_mbps = ($val|tonumber)"
 }
 
-set_time_window() {
-  read -rp "请输入高峰期时间段(如 10:00-02:00): " peak
-  read -rp "请输入低谷期时间段(如 02:00-10:00): " valley
+set_normal_peak_threshold() {
+  echo -e "${CYAN}当前配置的平峰期（09:00-22:00）阈值：${NC}"
+  jq -r '.threshold.dynamic[2].bandwidth_mbps' "$CLIENT_CFG" 2>/dev/null || echo "未找到配置"
+  read -rp "请输入新的平峰期带宽阈值(Mbps): " val
+  cfg_set ".threshold.dynamic[2].bandwidth_mbps = ($val|tonumber)"
+}
+
+set_time_windows() {
+  echo -e "${CYAN}当前时间段配置：${NC}"
+  echo "高峰期: $(jq -r '.threshold.dynamic[0].start + "-" + .threshold.dynamic[0].end' "$CLIENT_CFG" 2>/dev/null || echo "未找到")"
+  echo "低谷期: $(jq -r '.threshold.dynamic[1].start + "-" + .threshold.dynamic[1].end' "$CLIENT_CFG" 2>/dev/null || echo "未找到")"
+  echo "平峰期: $(jq -r '.threshold.dynamic[2].start + "-" + .threshold.dynamic[2].end' "$CLIENT_CFG" 2>/dev/null || echo "未找到")"
+  
+  read -rp "请输入高峰期时间段(如 22:00-02:00): " peak
+  read -rp "请输入低谷期时间段(如 02:00-09:00): " valley
+  read -rp "请输入平峰期时间段(如 09:00-22:00): " normal
+  
   IFS='-' read -r pstart pend <<<"$peak"
   IFS='-' read -r vstart vend <<<"$valley"
+  IFS='-' read -r nstart nend <<<"$normal"
+  
   ensure_jq
   tmp=$(mktemp)
-  jq ".threshold.dynamic[0].start=\"$pstart\" | .threshold.dynamic[0].end=\"$pend\" | .threshold.dynamic[1].start=\"$vstart\" | .threshold.dynamic[1].end=\"$vend\"" "$CLIENT_CFG" >"$tmp" && mv -f "$tmp" "$CLIENT_CFG"
-  systemctl restart bandwidth-monitor-client || true
-  echo "✓ 已更新峰谷时间并重启客户端"
+  jq ".threshold.dynamic[0].start=\"$pstart\" | .threshold.dynamic[0].end=\"$pend\" | .threshold.dynamic[1].start=\"$vstart\" | .threshold.dynamic[1].end=\"$vend\" | .threshold.dynamic[2].start=\"$nstart\" | .threshold.dynamic[2].end=\"$nend\"" "$CLIENT_CFG" >"$tmp" && mv -f "$tmp" "$CLIENT_CFG"
+  log_success "时间段配置已更新，将在5秒内自动重载"
 }
 
 set_client_name() {
+  echo -e "${CYAN}当前客户端名称：${NC}$(jq -r '.hostname' "$CLIENT_CFG" 2>/dev/null || echo "未找到")"
   read -rp "请输入新的客户端名称(hostname): " name
   cfg_set ".hostname=\"$name\""
 }
 
 set_server_url() {
+  echo -e "${CYAN}当前服务器地址：${NC}$(jq -r '.server_url' "$CLIENT_CFG" 2>/dev/null || echo "未找到")"
   read -rp "请输入新的对接地址(如 http://example.com:8080): " url
   cfg_set ".server_url=\"$url\""
 }
 
 set_report_interval() {
+  echo -e "${CYAN}当前上报间隔：${NC}$(jq -r '.report_interval_seconds' "$CLIENT_CFG" 2>/dev/null || echo "未找到")秒"
   read -rp "请输入新的上报间隔(秒): " sec
   cfg_set ".report_interval_seconds = ($sec|tonumber)"
 }
 
 toggle_static_threshold() {
+  echo -e "${CYAN}当前静态阈值：${NC}$(jq -r '.threshold.static_bandwidth_mbps' "$CLIENT_CFG" 2>/dev/null || echo "未找到")Mbps"
   read -rp "是否启用静态阈值? (y/n): " yn
   if [[ "$yn" =~ ^[Yy]$ ]]; then
     read -rp "请输入静态阈值(Mbps): " bw
@@ -122,73 +208,54 @@ toggle_static_threshold() {
 }
 
 set_beijing_time() {
-  timedatectl set-timezone Asia/Shanghai || true
-  timedatectl set-ntp true || true
-  echo "✓ 已设置为北京时间(Asia/Shanghai)，并开启NTP"
+  show_progress "设置北京时间"
+  timedatectl set-timezone Asia/Shanghai 2>/dev/null || true
+  timedatectl set-ntp true 2>/dev/null || true
+  log_success "已设置为北京时间(Asia/Shanghai)，并开启NTP"
+  echo -e "${CYAN}当前时间：${NC}$(date)"
+  read -p "按 Enter 键继续..."
 }
 
 choose_mirror() {
-  echo "当前镜像: ${RAW_PROXY:-GitHub 源}"
+  echo -e "${PURPLE}================= 镜像选择 =================${NC}"
+  echo -e "${CYAN}当前镜像:${NC} ${RAW_PROXY:-GitHub 源}"
   echo "1) 使用 GitHub 源"
-  echo "2) 使用中国大陆镜像(ghproxy)"
-  read -rp "选择: " op
+  echo "2) 使用中国大陆镜像(ghfast.top)"
+  read -rp "选择 [1-2]: " op
   case "$op" in
-    1) RAW_PROXY=""; export RELEASE_MIRROR="";;
-    2) RAW_PROXY="https://ghproxy.com/"; export RELEASE_MIRROR="https://ghproxy.com/";;
+    1) RAW_PROXY=""; export RELEASE_MIRROR=""; log_success "已切换到 GitHub 源";;
+    2) RAW_PROXY="https://ghfast.top/"; export RELEASE_MIRROR="https://ghfast.top/"; log_success "已切换到中国大陆镜像";;
+    *) log_warning "无效选择";;
   esac
+  read -p "按 Enter 键继续..."
 }
 
-menu_server() {
+config_menu() {
   while true; do
-    cat <<EOF
-================= 服务端功能 =================
-1) 安装服务端
-2) 更新服务端
-3) 查看服务端日志
-0) 返回上级
-=============================================
-EOF
-    read -rp "选择: " c
+    clear
+    echo -e "${PURPLE}================= 客户端（被控）配置修改 =================${NC}"
+    echo "1) 修改高峰期阈值 (22:00-02:00)"
+    echo "2) 修改低谷期阈值 (02:00-09:00)" 
+    echo "3) 修改平峰期阈值 (09:00-22:00)"
+    echo "4) 修改三个时间段"
+    echo "5) 修改客户端名称"
+    echo "6) 修改服务器地址"
+    echo "7) 修改上报间隔"
+    echo "8) 启用/关闭静态阈值"
+    echo "0) 返回主菜单"
+    echo -e "${PURPLE}================================================${NC}"
+    read -rp "请选择 [0-8]: " c
     case "$c" in
-      1) server_install;;
-      2) server_update;;
-      3) server_logs;;
+      1) set_high_peak_threshold; read -p "按 Enter 键继续...";;
+      2) set_low_valley_threshold; read -p "按 Enter 键继续...";;
+      3) set_normal_peak_threshold; read -p "按 Enter 键继续...";;
+      4) set_time_windows; read -p "按 Enter 键继续...";;
+      5) set_client_name; read -p "按 Enter 键继续...";;
+      6) set_server_url; read -p "按 Enter 键继续...";;
+      7) set_report_interval; read -p "按 Enter 键继续...";;
+      8) toggle_static_threshold; read -p "按 Enter 键继续...";;
       0) break;;
-    esac
-  done
-}
-
-menu_client() {
-  while true; do
-    cat <<EOF
-================= 客户端功能 =================
-1) 安装客户端
-2) 更新客户端
-3) 查看客户端日志
----------------------------------------------
-4) 修改高峰期阈值
-5) 修改低谷期阈值
-6) 修改峰谷时间段
-7) 修改客户端名称
-8) 修改对接地址
-9) 修改上报时间
-10) 启用/关闭静态阈值
-0) 返回上级
-=============================================
-EOF
-    read -rp "选择: " c
-    case "$c" in
-      1) client_install;;
-      2) client_update;;
-      3) client_logs;;
-      4) set_peak_threshold;;
-      5) set_valley_threshold;;
-      6) set_time_window;;
-      7) set_client_name;;
-      8) set_server_url;;
-      9) set_report_interval;;
-      10) toggle_static_threshold;;
-      0) break;;
+      *) log_warning "无效选择"; sleep 1;;
     esac
   done
 }
@@ -196,23 +263,38 @@ EOF
 main_menu() {
   require_root
   while true; do
-    cat <<EOF
-=============== Bandwidth Monitor ===============
-镜像: ${RAW_PROXY:-GitHub 源}    (m) 切换镜像
-
-1) 服务端功能
-2) 客户端功能
-3) 一键将系统时间设置为北京时间
-q) 退出
-================================================
-EOF
-    read -rp "选择: " a
+    clear
+    echo -e "${PURPLE}╔══════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║${NC}          ${CYAN}Bandwidth Monitor${NC} 控制面板         ${PURPLE}║${NC}"
+    echo -e "${PURPLE}╚══════════════════════════════════════════╝${NC}"
+    echo
+    echo -e "${CYAN}镜像:${NC} ${RAW_PROXY:-GitHub 源}    ${YELLOW}(m)${NC} 切换镜像"
+    echo
+    echo "1) 安装/更新服务端（主控）"
+    echo "2) 重启服务端（主控）" 
+    echo "3) 安装/更新客户端（被控）"
+    echo "4) 重启客户端（被控）"
+    echo "5) 客户端（被控）配置修改"
+    echo "6) 一键设置北京时间"
+    echo
+    echo "7) 查看服务端（主控）日志"
+    echo "8) 查看客户端（被控）日志"
+    echo
+    echo -e "${YELLOW}m)${NC} 切换镜像源    ${RED}q)${NC} 退出"
+    echo -e "${PURPLE}================================================${NC}"
+    read -rp "请选择 [1-8,m,q]: " a
     case "$a" in
+      1) server_install_update;;
+      2) server_restart;;
+      3) client_install_update;;
+      4) client_restart;;
+      5) config_menu;;
+      6) set_beijing_time;;
+      7) server_logs;;
+      8) client_logs;;
       m|M) choose_mirror;;
-      1) menu_server;;
-      2) menu_client;;
-      3) set_beijing_time;;
-      q|Q) exit 0;;
+      q|Q) echo -e "${GREEN}感谢使用！${NC}"; exit 0;;
+      *) log_warning "无效选择"; sleep 1;;
     esac
   done
 }

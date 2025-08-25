@@ -71,11 +71,11 @@ func loadConfig(path string) (*models.ServerConfig, error) {
 				OfflineSeconds: 300,
 			},
 		}
-		
+
 		if err := saveConfig(path, defaultConfig); err != nil {
 			return nil, fmt.Errorf("创建默认配置文件失败: %v", err)
 		}
-		
+
 		fmt.Printf("已创建默认配置文件: %s\n", path)
 		fmt.Println("请编辑配置文件后重新启动服务器")
 		os.Exit(0)

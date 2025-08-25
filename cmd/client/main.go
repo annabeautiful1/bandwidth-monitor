@@ -23,7 +23,7 @@ func main() {
 	}
 
 	// 创建客户端
-	c := client.NewClient(config)
+	c := client.NewClient(config, *configPath)
 
 	// 启动客户端
 	go func() {
@@ -63,6 +63,14 @@ func loadConfig(path string) (*models.ClientConfig, error) {
 			Hostname:              hostname,
 			ReportIntervalSeconds: 60,
 			InterfaceName:         "", // 留空将自动选择非回环网卡
+			Threshold: models.ClientThresholdConfig{
+				StaticBandwidthMbps: 0,
+				Dynamic: []models.TimeWindowThreshold{
+					{Start: "22:00", End: "02:00", BandwidthMbps: 200}, // 高峰期
+					{Start: "02:00", End: "09:00", BandwidthMbps: 50},  // 低谷期
+					{Start: "09:00", End: "22:00", BandwidthMbps: 100}, // 平峰期
+				},
+			},
 		}
 
 		if err := saveConfig(path, defaultConfig); err != nil {
