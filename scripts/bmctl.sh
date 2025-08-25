@@ -300,7 +300,7 @@ set_beijing_time() {
   log_success "已设置为北京时间(Asia/Shanghai)，并开启NTP"
   echo -e "${CYAN}当前时间：${NC}$(date)"
   
-  # 检查是否有运行的服务需要重启以应用新时区
+  # 检查是否有运行的服务
   services_to_restart=""
   if systemctl is-active --quiet bandwidth-monitor 2>/dev/null; then
     services_to_restart="${services_to_restart} bandwidth-monitor"
@@ -311,24 +311,33 @@ set_beijing_time() {
   
   if [ -n "$services_to_restart" ]; then
     echo
-    log_info "检测到运行中的服务，需要重启以应用新时区：$services_to_restart"
-    read -rp "是否立即重启服务以应用新时区？(y/n): " restart_services
-    if [[ "$restart_services" =~ ^[Yy]$ ]]; then
-      for service in $services_to_restart; do
-        show_progress "重启 $service 服务"
-        if systemctl restart "$service" 2>/dev/null; then
-          log_success "$service 重启完成"
-        else
-          log_error "$service 重启失败"
-        fi
-      done
-      log_success "所有服务已重启，新时区设置已生效"
-    else
-      log_warning "时区已设置，但服务未重启。请手动重启服务以使时区生效："
-      for service in $services_to_restart; do
-        echo "  systemctl restart $service"
-      done
-    fi
+    log_info "时区已设置，运行中的服务会在5秒内自动检测新时区"
+    log_info "如需立即生效，可选择重启服务：$services_to_restart"
+    echo
+    echo "选择操作："
+    echo "1 等待自动生效 (推荐，5秒内生效)"
+    echo "2 立即重启服务 (会产生上线/下线通知)"
+    echo "0 跳过"
+    read -rp "请选择 [0-2]: " restart_choice
+    case "$restart_choice" in
+      1)
+        log_success "时区设置完成，服务会自动检测新时区并热重载"
+        ;;
+      2)
+        for service in $services_to_restart; do
+          show_progress "重启 $service 服务"
+          if systemctl restart "$service" 2>/dev/null; then
+            log_success "$service 重启完成"
+          else
+            log_error "$service 重启失败"
+          fi
+        done
+        log_success "所有服务已重启，新时区设置已立即生效"
+        ;;
+      0|*)
+        log_info "时区已设置，服务会在下次上报时自动应用新时区"
+        ;;
+    esac
   else
     log_info "未检测到运行中的服务，时区设置已生效"
   fi
