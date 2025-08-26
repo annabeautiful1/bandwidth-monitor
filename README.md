@@ -1,5 +1,9 @@
 # 🚀 带宽监控系统 (Bandwidth Monitor)
 
+[![Release](https://img.shields.io/github/v/release/annabeautiful1/bandwidth-monitor)](https://github.com/annabeautiful1/bandwidth-monitor/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/annabeautiful1/bandwidth-monitor)](https://github.com/annabeautiful1/bandwidth-monitor)
+[![License](https://img.shields.io/github/license/annabeautiful1/bandwidth-monitor)](https://github.com/annabeautiful1/bandwidth-monitor/blob/main/LICENSE)
+
 ### 一键控制脚本（Github 与国内镜像）
 - Github 源
 ```bash
