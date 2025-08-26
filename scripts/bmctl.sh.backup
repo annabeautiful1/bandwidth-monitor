@@ -1,108 +1,12 @@
 #!/bin/bash
-# Bandwidth Monitor 统一控制脚本
-# 支持交互和非交互两种模式
-# 
-# 交互模式：bash <(curl bmctl.sh)
-# 非交互模式：bash <(curl bmctl.sh) <password> <server_url> <hostname> [interface] [interval]
+# Bandwidth Monitor 控制脚本（安装/更新/日志/配置）
+# 支持 GitHub 源与中国大陆加速镜像（ghfast）
 
 set -e
 
-# 全局变量
 REPO="annabeautiful1/bandwidth-monitor"
 RAW_BASE_GH="https://raw.githubusercontent.com/${REPO}/main"
 RAW_PROXY=""  # 将由 auto_detect_mirror 函数设置
-
-# 解析命令行参数
-parse_arguments() {
-    # 检查是否有参数
-    if [ $# -eq 0 ]; then
-        return 0  # 无参数，进入交互模式
-    fi
-    
-    # 非交互模式参数验证
-    if [ $# -lt 3 ]; then
-        echo -e "\033[0;31m[错误] 非交互模式需要至少3个参数\033[0m" >&2
-        echo "用法: bash <(curl bmctl.sh) <password> <server_url> <hostname> [interface] [interval]" >&2
-        echo "示例: bash <(curl bmctl.sh) abc123 http://api.example.com:8080 CN-GZ-QZY-1G" >&2
-        echo "完整: bash <(curl bmctl.sh) abc123 http://api.example.com:8080 CN-GZ-QZY-1G eth0 60" >&2
-        exit 1
-    fi
-    
-    # 提取参数
-    CLIENT_PASSWORD="$1"
-    CLIENT_SERVER_URL="$2" 
-    CLIENT_HOSTNAME="$3"
-    CLIENT_INTERFACE="${4:-}"     # 可选，默认为空（自动检测）
-    CLIENT_INTERVAL="${5:-60}"    # 可选，默认60秒
-    
-    # 参数验证
-    if [ -z "$CLIENT_PASSWORD" ] || [ -z "$CLIENT_SERVER_URL" ] || [ -z "$CLIENT_HOSTNAME" ]; then
-        echo -e "\033[0;31m[错误] 密码、服务器地址和主机名不能为空\033[0m" >&2
-        exit 1
-    fi
-    
-    # URL格式验证
-    if ! echo "$CLIENT_SERVER_URL" | grep -qE '^https?://[^/]+'; then
-        echo -e "\033[0;31m[错误] 服务器地址格式不正确，需要包含 http:// 或 https://\033[0m" >&2
-        echo "示例: http://api.example.com:8080" >&2
-        exit 1
-    fi
-    
-    # 间隔时间验证
-    if ! echo "$CLIENT_INTERVAL" | grep -qE '^[0-9]+$' || [ "$CLIENT_INTERVAL" -lt 10 ] || [ "$CLIENT_INTERVAL" -gt 3600 ]; then
-        echo -e "\033[0;31m[错误] 上报间隔必须是10-3600秒之间的数字\033[0m" >&2
-        exit 1
-    fi
-    
-    return 1  # 有参数，进入非交互模式
-}
-
-# 非交互模式：自动安装客户端
-non_interactive_install() {
-    echo -e "\033[0;34m[信息] 开始非交互模式客户端安装\033[0m"
-    echo "参数信息:"
-    echo "  服务器地址: $CLIENT_SERVER_URL"
-    echo "  主机名: $CLIENT_HOSTNAME" 
-    echo "  网卡: ${CLIENT_INTERFACE:-自动检测}"
-    echo "  上报间隔: ${CLIENT_INTERVAL}秒"
-    echo
-    
-    # 权限检查
-    if [[ $EUID -ne 0 ]]; then
-        echo -e "\033[0;31m[错误] 非交互模式需要root权限，请使用sudo运行\033[0m" >&2
-        exit 1
-    fi
-    
-    # 自动检测镜像源
-    auto_detect_mirror
-    
-    # 执行客户端安装
-    install_client_non_interactive
-    
-    echo -e "\033[0;32m[成功] 客户端安装完成！\033[0m"
-    echo
-    echo "管理命令:"
-    echo "  查看状态: systemctl status bandwidth-monitor-client"
-    echo "  查看日志: journalctl -u bandwidth-monitor-client -f"
-    echo "  重启服务: systemctl restart bandwidth-monitor-client"
-    echo "  停止服务: systemctl stop bandwidth-monitor-client"
-    echo
-    echo "快捷命令安装: sudo bash <(curl -sSL ${RAW_PROXY}${RAW_BASE_GH}/scripts/bmctl.sh)"
-    
-    exit 0
-}
-
-# 主程序入口
-main() {
-    # 解析参数并判断模式
-    if parse_arguments "$@"; then
-        # 交互模式
-        interactive_mode
-    else
-        # 非交互模式
-        non_interactive_install
-    fi
-}
 
 # IP地理位置检测和镜像自动选择
 auto_detect_mirror() {
@@ -724,7 +628,7 @@ check_current_versions() {
   echo "  最新版本: v0.3.0 (时区热更新+CPU/内存告警+配置自动升级)"
 }
 
-interactive_mode() {
+main_menu() {
   require_root
   
   # 自动检测并设置镜像源
@@ -771,113 +675,7 @@ interactive_mode() {
   done
 }
 
-# 非交互模式客户端安装函数
-install_client_non_interactive() {
-    echo -e "\033[0;33m[信息] 正在安装客户端...\033[0m"
-    
-    # 检测系统架构
-    ARCH=$(uname -m)
-    case "$ARCH" in
-        x86_64) ARCH="amd64" ;;
-        aarch64) ARCH="arm64" ;;
-        *) echo -e "\033[0;31m[错误] 不支持的架构: $ARCH\033[0m" >&2; exit 1 ;;
-    esac
-    
-    # 获取最新版本
-    echo -e "\033[0;33m[信息] 正在获取最新版本信息...\033[0m"
-    LATEST_VERSION=$(curl -s --max-time 10 "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null || echo "v0.3.1")
-    echo -e "\033[0;32m[成功] 最新版本: $LATEST_VERSION\033[0m"
-    
-    # 设置下载URL
-    BASE_GH="https://github.com"
-    if [ -n "$RAW_PROXY" ]; then
-        BASE_GH="$RAW_PROXY"
-    fi
-    DOWNLOAD_URL="$BASE_GH/$REPO/releases/download/$LATEST_VERSION/bandwidth-monitor-client-linux-$ARCH"
-    
-    # 创建安装目录
-    INSTALL_DIR="/opt/bandwidth-monitor-client"
-    mkdir -p "$INSTALL_DIR"
-    
-    # 下载二进制文件
-    echo -e "\033[0;33m[信息] 正在下载客户端程序...\033[0m"
-    if ! curl -L -o "$INSTALL_DIR/client" "$DOWNLOAD_URL"; then
-        echo -e "\033[0;31m[错误] 下载失败，请检查网络连接\033[0m" >&2
-        exit 1
-    fi
-    chmod +x "$INSTALL_DIR/client"
-    
-    # 创建配置文件
-    create_client_config_non_interactive
-    
-    # 创建systemd服务
-    create_client_service
-    
-    # 启动服务
-    systemctl daemon-reload
-    systemctl enable bandwidth-monitor-client
-    systemctl start bandwidth-monitor-client
-    
-    echo -e "\033[0;32m[成功] 客户端安装并启动完成\033[0m"
-}
-
-# 创建客户端配置文件（非交互模式）
-create_client_config_non_interactive() {
-    local config_file="$INSTALL_DIR/client.json"
-    
-    echo -e "\033[0;33m[信息] 正在生成配置文件...\033[0m"
-    
-    cat > "$config_file" << EOF
-{
-  "password": "$CLIENT_PASSWORD",
-  "server_url": "$CLIENT_SERVER_URL",
-  "hostname": "$CLIENT_HOSTNAME",
-  "report_interval_seconds": $CLIENT_INTERVAL,
-  "interface_name": "$CLIENT_INTERFACE",
-  "threshold": {
-    "static_bandwidth_mbps": 0,
-    "dynamic": [
-      {"start": "22:00", "end": "02:00", "bandwidth_mbps": 200},
-      {"start": "02:00", "end": "09:00", "bandwidth_mbps": 50},
-      {"start": "09:00", "end": "22:00", "bandwidth_mbps": 100}
-    ]
-  }
-}
-EOF
-    
-    echo -e "\033[0;32m[成功] 配置文件已生成: $config_file\033[0m"
-}
-
-# 创建客户端systemd服务
-create_client_service() {
-    echo -e "\033[0;33m[信息] 正在创建systemd服务...\033[0m"
-    
-    cat > /etc/systemd/system/bandwidth-monitor-client.service << EOF
-[Unit]
-Description=Bandwidth Monitor Client
-After=network.target
-Wants=network.target
-
-[Service]
-Type=simple
-User=root
-Group=root
-ExecStart=$INSTALL_DIR/client -config $INSTALL_DIR/client.json
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=client
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    
-    echo -e "\033[0;32m[成功] systemd服务已创建\033[0m"
-}
-
-# 启动主程序
-main "$@"
+main_menu
 
 
 

@@ -4,23 +4,59 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/annabeautiful1/bandwidth-monitor)](https://github.com/annabeautiful1/bandwidth-monitor)
 [![License](https://img.shields.io/github/license/annabeautiful1/bandwidth-monitor)](https://github.com/annabeautiful1/bandwidth-monitor/blob/main/LICENSE)
 
-### 一键控制脚本（Github 与国内镜像）
-- Github 源
-```bash
-bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
-```
-- 中国大陆镜像（ghfast）
-```bash
-bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
-```
-> 脚本提供：
-> - 服务端：安装/更新主控、重启服务端、查看服务端日志
-> - 客户端：安装/更新被控、重启客户端、查看客户端日志  
-> - 配置修改：高峰/低谷/平峰三时段阈值、时间段、名称、对接地址、上报间隔、启用/关闭静态阈值
-> - 系统时间：一键设置为北京时间
-> - 简化命令：可安装 bm、status bm、log bm、restart bm 等快捷命令
+一个轻量级的分布式带宽监控系统，支持实时监控服务器带宽、CPU、内存使用情况，并在异常时通过Telegram发送告警通知。
 
-一个轻量级的分布式带宽监控系统，支持实时监控服务器带宽使用情况，并在带宽异常时通过Telegram发送告警通知。
+## 🎯 快速开始
+
+### 📱 交互式管理（推荐）
+```bash
+# 一键启动管理面板
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
+
+# 中国大陆加速镜像
+sudo bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
+```
+
+交互面板提供：
+- 🖥️ **服务端管理**: 安装/更新/重启监控服务器
+- 💻 **客户端管理**: 批量部署和管理被监控节点
+- ⚙️ **配置编辑**: 可视化配置三时段动态阈值
+- 📊 **实时状态**: 显示所有节点版本和运行状态
+- 🕐 **时区设置**: 一键设置北京时间
+- 🔧 **快捷命令**: 自动安装 `bm`, `status bm`, `log bm` 等快捷命令
+
+### ⚡ 客户端一键安装（非交互）
+```bash
+# 基础安装（密码 服务器地址 主机名）
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh) \
+  abc123 \
+  http://your-server.com:8080 \
+  CN-BJ-WEB-01
+
+# 完整配置（+ 网卡名 上报间隔）
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh) \
+  abc123 \
+  http://your-server.com:8080 \
+  CN-BJ-WEB-01 \
+  eth0 \
+  30
+```
+
+> 💡 **非交互模式说明**：
+> - `密码`: 客户端连接服务器的认证密码
+> - `服务器地址`: 监控服务器的完整URL
+> - `主机名`: 节点显示名称
+> - `网卡名`: 可选，留空自动检测
+> - `上报间隔`: 可选，默认60秒，范围10-3600秒
+
+### 🚀 批量部署示例
+```bash
+# 批量部署多台服务器
+servers=("192.168.1.10" "192.168.1.11" "192.168.1.12")
+for i in "${!servers[@]}"; do
+  ssh root@${servers[$i]} "bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh) abc123 http://monitor.company.com:8080 WEB-0$((i+1))"
+done
+```
 
 ## ✨ 功能特点
 
