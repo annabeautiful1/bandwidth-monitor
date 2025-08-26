@@ -350,38 +350,12 @@ check_shortcuts_installed() {
   [[ -f /usr/local/bin/bm ]] && [[ -f /usr/local/bin/status ]] && [[ -f /usr/local/bin/log ]] && [[ -f /usr/local/bin/restart ]]
 }
 
-# 首次运行时自动安装快捷命令
-install_shortcuts_if_needed() {
-  if ! check_shortcuts_installed; then
-    show_progress "检测到快捷命令未安装，正在自动安装"
-    install_shortcuts_silent
-  fi
-}
-
 # 静默安装快捷命令
 install_shortcuts_silent() {
   install_shortcuts_core 2>/dev/null
   if check_shortcuts_installed; then
     log_success "快捷命令已自动安装 (bm, status bm, log bm, restart bm)"
   fi
-}
-
-# 用户手动安装快捷命令
-install_shortcuts() {
-  show_progress "安装/更新快捷命令"
-  install_shortcuts_core
-  if check_shortcuts_installed; then
-    log_success "快捷命令安装完成！"
-    echo
-    log_info "可用命令："
-    echo "  sudo bm          - 打开控制面板"
-    echo "  status bm        - 查看服务状态"
-    echo "  log bm           - 查看日志"
-    echo "  sudo restart bm  - 重启服务"
-  else
-    log_error "快捷命令安装失败"
-  fi
-  read -p "按 Enter 键继续..."
 }
 
 # 核心安装逻辑
@@ -626,9 +600,24 @@ check_current_versions() {
     client_status="⏹️ 已安装未运行"
   fi
   
+  # 检查并自动安装/更新快捷命令
+  local shortcut_status=""
+  if ! check_shortcuts_installed; then
+    shortcut_status=" | 快捷命令: 🔄 自动安装中..."
+    install_shortcuts_silent
+    if check_shortcuts_installed; then
+      shortcut_status=" | 快捷命令: ✅ 已安装"
+    else
+      shortcut_status=" | 快捷命令: ❌ 安装失败"
+    fi
+  else
+    shortcut_status=" | 快捷命令: ✅ 已安装"
+  fi
+  
   echo -e "${CYAN}当前版本状态:${NC}"
   echo "  服务端: $server_status$server_config_status"
   echo "  客户端: $client_status$client_config_status"
+  echo "  系统工具: v0.3.0$shortcut_status"
   echo "  最新版本: v0.3.0 (时区热更新+CPU/内存告警+配置自动升级)"
 }
 
@@ -637,9 +626,6 @@ main_menu() {
   
   # 自动检测并设置镜像源
   auto_detect_mirror
-  
-  # 首次运行时自动安装快捷命令
-  install_shortcuts_if_needed
   
   while true; do
     clear
@@ -659,14 +645,14 @@ main_menu() {
     echo "7 查看服务端（主控）日志"
     echo "8 查看客户端（被控）日志"
     echo
-    echo -e "${YELLOW}i${NC} 安装/更新快捷命令    ${RED}0${NC} 退出"
+    echo -e "${RED}0${NC} 退出"
     echo -e "${PURPLE}================================================${NC}"
     
     # 显示版本信息
     check_current_versions
     echo -e "${PURPLE}================================================${NC}"
     
-    read -rp "请选择 [0-8,i]: " a
+    read -rp "请选择 [0-8]: " a
     case "$a" in
       1) server_install_update;;
       2) server_restart;;
@@ -676,7 +662,6 @@ main_menu() {
       6) set_beijing_time;;
       7) server_logs;;
       8) client_logs;;
-      i|I) install_shortcuts;;
       0) echo -e "${GREEN}感谢使用！${NC}"; exit 0;;
       *) log_warning "无效选择"; sleep 1;;
     esac
