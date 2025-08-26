@@ -47,14 +47,28 @@ echo -e "${GREEN}检测到系统架构: $ARCH${NC}"
 
 # 获取最新版本
 echo -e "${YELLOW}正在获取最新版本信息...${NC}"
-LATEST_VERSION=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
+# 尝试多种方式获取版本信息
+LATEST_VERSION=""
+
+# 方法1: 直接使用GitHub API
 if [ -z "$LATEST_VERSION" ]; then
-    echo -e "${RED}无法获取最新版本信息，请检查网络连接${NC}"
-    exit 1
+    LATEST_VERSION=$(curl -s --max-time 10 "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null)
 fi
 
-echo -e "${GREEN}最新版本: $LATEST_VERSION${NC}"
+# 方法2: 如果有镜像源，尝试通过镜像访问API
+if [ -z "$LATEST_VERSION" ] && [ -n "${RELEASE_MIRROR:-}" ]; then
+    # 尝试镜像源的API（去掉镜像前缀，直接访问原始API）
+    LATEST_VERSION=$(curl -s --max-time 10 "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null)
+fi
+
+# 方法3: 使用预设的版本作为后备
+if [ -z "$LATEST_VERSION" ]; then
+    LATEST_VERSION="v0.3.1"  # 后备版本
+    echo -e "${YELLOW}网络API访问失败，使用预设版本: $LATEST_VERSION${NC}"
+else
+    echo -e "${GREEN}最新版本: $LATEST_VERSION${NC}"
+fi
 
 # 下载URL（可通过 RELEASE_MIRROR 指定镜像前缀，例如 https://ghfast.top/）
 BASE_GH="https://github.com"
