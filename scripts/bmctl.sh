@@ -156,7 +156,11 @@ ensure_jq() {
 # ---------- 服务端（主控） ----------
 server_install_update() {
   show_progress "安装/更新服务端（主控）"
-  if download_with_fallback "$(raw_url scripts/install-server.sh)" | bash 2>&1; then
+  # 确保环境变量正确传递
+  export RELEASE_MIRROR="${RAW_PROXY}"
+  echo -e "${CYAN}使用镜像源: ${RELEASE_MIRROR:-GitHub 源}${NC}"
+  
+  if RELEASE_MIRROR="$RELEASE_MIRROR" bash <(download_with_fallback "$(raw_url scripts/install-server.sh)") 2>&1; then
     log_success "服务端（主控）安装/更新完成"
   else
     log_error "服务端（主控）安装/更新失败"
@@ -183,8 +187,11 @@ server_logs() {
 # ---------- 客户端（被控） ----------
 client_install_update() {
   show_progress "安装/更新客户端（被控）"
-  RELEASE_MIRROR="${RELEASE_MIRROR:-${RAW_PROXY}}"
-  if download_with_fallback "$(raw_url scripts/install-client.sh)" | bash 2>&1; then
+  # 确保环境变量正确传递
+  export RELEASE_MIRROR="${RAW_PROXY}"
+  echo -e "${CYAN}使用镜像源: ${RELEASE_MIRROR:-GitHub 源}${NC}"
+  
+  if RELEASE_MIRROR="$RELEASE_MIRROR" bash <(download_with_fallback "$(raw_url scripts/install-client.sh)") 2>&1; then
     log_success "客户端（被控）安装/更新完成"
   else
     log_error "客户端（被控）安装/更新失败"
@@ -669,5 +676,6 @@ main_menu() {
 }
 
 main_menu
+
 
 
