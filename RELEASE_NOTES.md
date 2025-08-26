@@ -99,12 +99,10 @@ sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth
 ```
 
 ### 手动升级
+使用统一控制脚本的交互菜单进行升级：
 ```bash
-# 服务端升级
-curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | bash
-
-# 客户端升级  
-curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | bash
+# 启动控制面板，选择对应的安装/更新选项
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
 ```
 
 ### 配置兼容性

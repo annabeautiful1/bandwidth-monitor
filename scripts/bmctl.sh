@@ -252,16 +252,59 @@ ensure_jq() {
 # ---------- 服务端（主控） ----------
 server_install_update() {
   show_progress "安装/更新服务端（主控）"
-  # 确保环境变量正确传递
-  export RELEASE_MIRROR="${RAW_PROXY}"
-  echo -e "${CYAN}使用镜像源: ${RELEASE_MIRROR:-GitHub 源}${NC}"
   
-  if RELEASE_MIRROR="$RELEASE_MIRROR" bash <(download_with_fallback "$(raw_url scripts/install-server.sh)") 2>&1; then
-    log_success "服务端（主控）安装/更新完成"
-  else
-    log_error "服务端（主控）安装/更新失败"
-    read -p "按 Enter 键继续..."
+  # 检测系统架构
+  ARCH=$(uname -m)
+  case "$ARCH" in
+      x86_64) ARCH="amd64" ;;
+      aarch64) ARCH="arm64" ;;
+      *) log_error "不支持的架构: $ARCH"; read -p "按 Enter 键继续..."; return 1 ;;
+  esac
+  
+  # 获取最新版本
+  log_info "正在获取最新版本信息..."
+  LATEST_VERSION=$(curl -s --max-time 10 "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null || echo "v0.3.1")
+  log_success "最新版本: $LATEST_VERSION"
+  
+  # 设置下载URL
+  BASE_GH="https://github.com"
+  if [ -n "$RAW_PROXY" ]; then
+      BASE_GH="$RAW_PROXY"
   fi
+  DOWNLOAD_URL="$BASE_GH/$REPO/releases/download/$LATEST_VERSION/bandwidth-monitor-server-linux-$ARCH"
+  
+  # 创建安装目录
+  INSTALL_DIR="/opt/bandwidth-monitor"
+  mkdir -p "$INSTALL_DIR"
+  
+  # 下载二进制文件
+  log_info "正在下载服务端程序..."
+  if curl -L -o "$INSTALL_DIR/server" "$DOWNLOAD_URL"; then
+      chmod +x "$INSTALL_DIR/server"
+      log_success "服务端程序下载完成"
+  else
+      log_error "下载失败，请检查网络连接"
+      read -p "按 Enter 键继续..."
+      return 1
+  fi
+  
+  # 创建或更新配置文件
+  create_server_config_interactive
+  
+  # 创建systemd服务
+  create_server_service
+  
+  # 重新加载并启动服务
+  systemctl daemon-reload
+  systemctl enable bandwidth-monitor
+  if systemctl restart bandwidth-monitor 2>/dev/null; then
+      log_success "服务端（主控）安装/更新完成"
+      systemctl status bandwidth-monitor --no-pager -l
+  else
+      log_error "服务启动失败"
+  fi
+  
+  read -p "按 Enter 键继续..."
 }
 
 server_restart() {
@@ -283,16 +326,59 @@ server_logs() {
 # ---------- 客户端（被控） ----------
 client_install_update() {
   show_progress "安装/更新客户端（被控）"
-  # 确保环境变量正确传递
-  export RELEASE_MIRROR="${RAW_PROXY}"
-  echo -e "${CYAN}使用镜像源: ${RELEASE_MIRROR:-GitHub 源}${NC}"
   
-  if RELEASE_MIRROR="$RELEASE_MIRROR" bash <(download_with_fallback "$(raw_url scripts/install-client.sh)") 2>&1; then
-    log_success "客户端（被控）安装/更新完成"
-  else
-    log_error "客户端（被控）安装/更新失败"
-    read -p "按 Enter 键继续..."
+  # 检测系统架构
+  ARCH=$(uname -m)
+  case "$ARCH" in
+      x86_64) ARCH="amd64" ;;
+      aarch64) ARCH="arm64" ;;
+      *) log_error "不支持的架构: $ARCH"; read -p "按 Enter 键继续..."; return 1 ;;
+  esac
+  
+  # 获取最新版本
+  log_info "正在获取最新版本信息..."
+  LATEST_VERSION=$(curl -s --max-time 10 "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null || echo "v0.3.1")
+  log_success "最新版本: $LATEST_VERSION"
+  
+  # 设置下载URL
+  BASE_GH="https://github.com"
+  if [ -n "$RAW_PROXY" ]; then
+      BASE_GH="$RAW_PROXY"
   fi
+  DOWNLOAD_URL="$BASE_GH/$REPO/releases/download/$LATEST_VERSION/bandwidth-monitor-client-linux-$ARCH"
+  
+  # 创建安装目录
+  INSTALL_DIR="/opt/bandwidth-monitor-client"
+  mkdir -p "$INSTALL_DIR"
+  
+  # 下载二进制文件
+  log_info "正在下载客户端程序..."
+  if curl -L -o "$INSTALL_DIR/client" "$DOWNLOAD_URL"; then
+      chmod +x "$INSTALL_DIR/client"
+      log_success "客户端程序下载完成"
+  else
+      log_error "下载失败，请检查网络连接"
+      read -p "按 Enter 键继续..."
+      return 1
+  fi
+  
+  # 创建或更新配置文件
+  create_client_config_interactive
+  
+  # 创建systemd服务
+  create_client_service
+  
+  # 重新加载并启动服务
+  systemctl daemon-reload
+  systemctl enable bandwidth-monitor-client
+  if systemctl restart bandwidth-monitor-client 2>/dev/null; then
+      log_success "客户端（被控）安装/更新完成"
+      systemctl status bandwidth-monitor-client --no-pager -l
+  else
+      log_error "服务启动失败"
+  fi
+  
+  read -p "按 Enter 键继续..."
 }
 
 client_restart() {
@@ -876,8 +962,117 @@ EOF
     echo -e "\033[0;32m[成功] systemd服务已创建\033[0m"
 }
 
+# 创建服务端配置文件（交互模式）
+create_server_config_interactive() {
+    local config_file="$INSTALL_DIR/config.json"
+    
+    if [ -f "$config_file" ]; then
+        log_info "检测到现有配置文件，保留现有设置"
+        return 0
+    fi
+    
+    log_info "创建服务端配置文件..."
+    echo "需要配置以下信息："
+    
+    # 获取配置信息
+    read -rp "请输入访问密码: " password
+    read -rp "请输入监听端口 (默认8080): " port
+    port=${port:-8080}
+    read -rp "请输入Telegram Bot Token (可选): " bot_token
+    if [ -n "$bot_token" ]; then
+        read -rp "请输入Telegram Chat ID: " chat_id
+    fi
+    
+    cat > "$config_file" << EOF
+{
+  "password": "$password",
+  "listen": ":$port",
+  "domain": "localhost",
+  "telegram": {
+    "bot_token": "${bot_token:-}",
+    "chat_id": ${chat_id:-0}
+  },
+  "thresholds": {
+    "bandwidth_mbps": 100,
+    "offline_seconds": 300,
+    "cpu_percent": 95,
+    "memory_percent": 95
+  }
+}
+EOF
+    
+    log_success "配置文件已生成: $config_file"
+}
+
+# 创建客户端配置文件（交互模式）
+create_client_config_interactive() {
+    local config_file="$INSTALL_DIR/client.json"
+    
+    if [ -f "$config_file" ]; then
+        log_info "检测到现有配置文件，保留现有设置"
+        return 0
+    fi
+    
+    log_info "创建客户端配置文件..."
+    echo "需要配置以下信息："
+    
+    # 获取配置信息
+    read -rp "请输入访问密码: " password
+    read -rp "请输入服务器地址 (如 http://example.com:8080): " server_url
+    read -rp "请输入节点名称: " hostname
+    read -rp "请输入网卡名称 (留空自动检测): " interface_name
+    read -rp "请输入上报间隔秒数 (默认60): " interval
+    interval=${interval:-60}
+    
+    cat > "$config_file" << EOF
+{
+  "password": "$password",
+  "server_url": "$server_url",
+  "hostname": "$hostname",
+  "report_interval_seconds": $interval,
+  "interface_name": "$interface_name",
+  "threshold": {
+    "static_bandwidth_mbps": 0,
+    "dynamic": [
+      {"start": "22:00", "end": "02:00", "bandwidth_mbps": 200},
+      {"start": "02:00", "end": "09:00", "bandwidth_mbps": 50},
+      {"start": "09:00", "end": "22:00", "bandwidth_mbps": 100}
+    ]
+  }
+}
+EOF
+    
+    log_success "配置文件已生成: $config_file"
+}
+
+# 创建服务端systemd服务
+create_server_service() {
+    log_info "正在创建服务端systemd服务..."
+    
+    cat > /etc/systemd/system/bandwidth-monitor.service << EOF
+[Unit]
+Description=Bandwidth Monitor Server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=$INSTALL_DIR/server -config $INSTALL_DIR/config.json
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=server
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    log_success "systemd服务已创建"
+}
+
 # 启动主程序
 main "$@"
-
-
 

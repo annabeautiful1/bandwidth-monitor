@@ -117,14 +117,14 @@ jobs:
           sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
           ```
           
-          **服务端安装/升级:**
+          **统一控制脚本（交互模式）:**
           ```bash
-          curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
+          sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
           ```
           
-          **客户端安装/升级:**
+          **客户端一键安装（非交互模式）:**
           ```bash  
-          curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
+          sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh) <password> <server_url> <hostname> [interface] [interval]
           ```
           
           ### 🏗️ 支持平台

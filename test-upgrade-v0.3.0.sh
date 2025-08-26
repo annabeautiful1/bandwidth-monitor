@@ -16,7 +16,7 @@ echo "- 时间: $(date '+%Y-%m-%d %H:%M:%S')"
 # 测试服务端升级
 echo
 echo "🔧 测试服务端升级功能:"
-echo "curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash"
+echo "sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)"
 echo
 echo "预期结果:"
 echo "- ✅ 自动下载最新的v0.3.0版本二进制文件"
@@ -27,7 +27,7 @@ echo "- ✅ 启动服务后支持时区热更新"
 
 echo
 echo "🔧 测试客户端升级功能:"
-echo "curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash"
+echo "sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)"
 echo
 echo "预期结果:"
 echo "- ✅ 自动下载最新的v0.3.0版本二进制文件"
@@ -73,8 +73,7 @@ echo "3. 重启程序，确认自动补全默认值并保存"
 
 echo
 echo "🎯 升级命令:"
-echo "服务端: curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash"
-echo "客户端: curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash"  
+echo "使用统一脚本: sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)"  
 echo "一键脚本: sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)"
 
 echo

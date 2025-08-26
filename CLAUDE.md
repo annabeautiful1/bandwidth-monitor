@@ -71,11 +71,8 @@ go test ./...
 - 配置文件使用JSON格式，支持热重载（部分功能）
 
 ### 部署脚本
-`scripts/` 目录包含完整的安装和管理脚本：
-- `bmctl.sh`: 统一控制脚本，支持安装、更新、日志查看、配置修改
-- `install-server.sh` / `install-client.sh`: 自动安装脚本
-- `update-server.sh` / `update-client.sh`: 更新脚本
-- `setup-client.sh`: 非交互式客户端配置脚本
+`scripts/` 目录包含统一的安装和管理脚本：
+- `bmctl.sh`: 统一控制脚本，支持交互和非交互两种模式，提供安装、更新、日志查看、配置修改等全部功能
 
 ### 系统服务
 - 服务端服务名: `bandwidth-monitor`

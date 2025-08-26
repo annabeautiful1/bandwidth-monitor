@@ -51,7 +51,7 @@ sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth
 
 ### 🚀 批量部署示例
 ```bash
-# 批量部署多台服务器
+# 批量部署多台服务器（非交互模式）
 servers=("192.168.1.10" "192.168.1.11" "192.168.1.12")
 for i in "${!servers[@]}"; do
   ssh root@${servers[$i]} "bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh) abc123 http://monitor.company.com:8080 WEB-0$((i+1))"
@@ -90,38 +90,30 @@ done
 
 ## 📦 快速开始
 
-### 1. 服务端安装 (监控服务器)
+### 1. 使用统一控制脚本（推荐）
 - GitHub 源
 ```bash
-curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
 ```
-- 中国大陆镜像（ghfast）
+- 中国大陆镜像
 ```bash
-curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-server.sh | sudo bash
+sudo bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
 ```
 
-### 2. 客户端安装 (被监控服务器)
-- GitHub 源（交互式）
+通过交互式菜单可以：
+- 安装/更新服务端（主控）
+- 安装/更新客户端（被控）
+- 修改客户端配置
+- 查看日志和状态
+- 一键设置北京时间
+
+### 2. 客户端一键安装（非交互）
 ```bash
-curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
-```
-- 中国大陆镜像（交互式）
-```bash
-curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/install-client.sh | sudo bash
-```
-- GitHub 源（一键非交互）
-```bash
-wget -O setup-client.sh https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh && chmod +x setup-client.sh
-```
-```bash
-sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
-```
-- 中国大陆镜像（一键非交互）
-```bash
-wget -O setup-client.sh https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/setup-client.sh && chmod +x setup-client.sh
-```
-```bash
-sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
+# GitHub 源
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh) <password> <server_url> <name> [iface] [interval]
+
+# 中国大陆镜像
+sudo bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh) <password> <server_url> <name> [iface] [interval]
 ```
 **参数说明**
 - `password`：与服务端配置一致的访问密码（客户端上报校验用）。
@@ -132,34 +124,17 @@ sudo ./setup-client.sh <password> <server_url> <name> [iface] [interval]
 
 示例：
 ```bash
-sudo ./setup-client.sh abc123 http://api.example.com:8080 CN-GZ-QZY-1G eth0 60
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh) abc123 http://api.example.com:8080 CN-GZ-QZY-1G eth0 60
 ```
 
-### 3. 一键更新（升级到最新Release）
-- GitHub 源
+### 3. 更新到最新版本
+使用统一控制脚本的交互菜单即可更新：
 ```bash
-# 服务端
-bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-server.sh)
-```
-```bash
-# 客户端
-bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
-```
-- 中国大陆镜像
-```bash
-# 服务端
-bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-server.sh)
-```
-```bash
-# 客户端
-bash <(curl -sSL https://ghfast.top/https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
+# 启动控制面板，选择对应的安装/更新选项
+sudo bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/bmctl.sh)
 ```
 
-> 提升发布包下载速度：脚本支持通过 `RELEASE_MIRROR` 指定 Release 下载镜像前缀（如 `https://ghfast.top/`）。可在 https://ghproxy.link/ 获取最新可用镜像地址。示例：
-```bash
-RELEASE_MIRROR=https://ghfast.top/ \
-bash <(curl -sSL https://raw.githubusercontent.com/annabeautiful1/bandwidth-monitor/main/scripts/update-client.sh)
-```
+> 脚本会自动检测网络环境并选择最优镜像源（GitHub 或 ghfast.top），无需手动配置。
 
 ## ⚙️ 阈值配置（客户端侧）
 - 阈值由客户端计算后随上报一并发送到服务端，服务端据此判断告警/恢复。
