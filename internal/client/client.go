@@ -94,48 +94,29 @@ func (c *Client) reloadSystemTimezone() error {
 	c.tzMutex.Lock()
 	defer c.tzMutex.Unlock()
 	
-	// 读取系统时区文件
-	var newLocation *time.Location
-	var err error
+	// 首先获取系统当前实际使用的时区
+	systemTime := time.Now()
+	currentSystemTZ := systemTime.Location()
 	
-	// 尝试从 /etc/timezone 读取时区名称（Debian/Ubuntu）
-	if tzData, readErr := os.ReadFile("/etc/timezone"); readErr == nil {
-		tzName := strings.TrimSpace(string(tzData))
-		if newLocation, err = time.LoadLocation(tzName); err == nil {
-			log.Printf("从 /etc/timezone 加载时区: %s", tzName)
-		}
-	}
-	
-	// 如果上面失败，尝试解析 /etc/localtime 软链接（RedHat/CentOS）
-	if newLocation == nil {
-		if linkTarget, readErr := os.Readlink("/etc/localtime"); readErr == nil {
-			// /etc/localtime -> /usr/share/zoneinfo/Asia/Shanghai
-			if idx := strings.Index(linkTarget, "zoneinfo/"); idx != -1 {
-				tzName := linkTarget[idx+9:]
-				if newLocation, err = time.LoadLocation(tzName); err == nil {
-					log.Printf("从 /etc/localtime 软链接加载时区: %s", tzName)
-				}
-			}
-		}
-	}
-	
-	// 如果都失败了，保持当前时区
-	if newLocation == nil {
-		log.Printf("无法重载系统时区，保持当前时区: %s", c.currentTZ.String())
-		return fmt.Errorf("无法重载系统时区: %v", err)
-	}
-	
-	// 检查时区是否真的改变了
-	oldTZ := c.currentTZ
-	if oldTZ.String() != newLocation.String() {
-		c.currentTZ = newLocation
-		log.Printf("系统时区已热重载: %s -> %s", oldTZ.String(), newLocation.String())
-		
-		// 测试新时区
-		now := c.now()
-		log.Printf("新时区当前时间: %s", now.Format("2006-01-02 15:04:05 MST"))
+	// 检查是否需要更新时区
+	if c.currentTZ.String() == currentSystemTZ.String() {
+		// 时区没有变化，无需更新
 		return nil
 	}
+	
+	// 验证新时区是否有效
+	testTime := time.Now().In(currentSystemTZ)
+	if testTime.IsZero() {
+		log.Printf("无效的系统时区，保持当前时区: %s", c.currentTZ.String())
+		return fmt.Errorf("无效的系统时区")
+	}
+	
+	// 更新时区
+	oldTZ := c.currentTZ
+	c.currentTZ = currentSystemTZ
+	
+	log.Printf("系统时区已热重载: %s -> %s", oldTZ.String(), currentSystemTZ.String())
+	log.Printf("新时区当前时间: %s", testTime.Format("2006-01-02 15:04:05 MST"))
 	
 	return nil
 }
